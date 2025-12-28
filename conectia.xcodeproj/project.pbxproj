@@ -6,6 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		87683FC62ED3D96C00BCC5D5 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 87683FC52ED3D96C00BCC5D5 /* FirebaseAuth */; };
+		87683FC82ED3D96C00BCC5D5 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 87683FC72ED3D96C00BCC5D5 /* FirebaseCore */; };
+		87683FCA2ED3D96C00BCC5D5 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 87683FC92ED3D96C00BCC5D5 /* FirebaseFirestore */; };
+		87683FCC2ED3D96C00BCC5D5 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 87683FCB2ED3D96C00BCC5D5 /* FirebaseStorage */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		87D71AB02ECBA83400E21E60 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -35,16 +42,6 @@
 			path = conectia;
 			sourceTree = "<group>";
 		};
-		87D71AB22ECBA83400E21E60 /* conectiaTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = conectiaTests;
-			sourceTree = "<group>";
-		};
-		87D71ABC2ECBA83500E21E60 /* conectiaUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = conectiaUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +49,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				87683FC82ED3D96C00BCC5D5 /* FirebaseCore in Frameworks */,
+				87683FCC2ED3D96C00BCC5D5 /* FirebaseStorage in Frameworks */,
+				87683FC62ED3D96C00BCC5D5 /* FirebaseAuth in Frameworks */,
+				87683FCA2ED3D96C00BCC5D5 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,8 +77,6 @@
 			isa = PBXGroup;
 			children = (
 				87D71AA42ECBA83400E21E60 /* conectia */,
-				87D71AB22ECBA83400E21E60 /* conectiaTests */,
-				87D71ABC2ECBA83500E21E60 /* conectiaUITests */,
 				87D71AA32ECBA83400E21E60 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -112,6 +111,10 @@
 			);
 			name = conectia;
 			packageProductDependencies = (
+				87683FC52ED3D96C00BCC5D5 /* FirebaseAuth */,
+				87683FC72ED3D96C00BCC5D5 /* FirebaseCore */,
+				87683FC92ED3D96C00BCC5D5 /* FirebaseFirestore */,
+				87683FCB2ED3D96C00BCC5D5 /* FirebaseStorage */,
 			);
 			productName = conectia;
 			productReference = 87D71AA22ECBA83400E21E60 /* conectia.app */;
@@ -129,9 +132,6 @@
 			);
 			dependencies = (
 				87D71AB12ECBA83400E21E60 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				87D71AB22ECBA83400E21E60 /* conectiaTests */,
 			);
 			name = conectiaTests;
 			packageProductDependencies = (
@@ -152,9 +152,6 @@
 			);
 			dependencies = (
 				87D71ABB2ECBA83500E21E60 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				87D71ABC2ECBA83500E21E60 /* conectiaUITests */,
 			);
 			name = conectiaUITests;
 			packageProductDependencies = (
@@ -195,6 +192,9 @@
 			);
 			mainGroup = 87D71A992ECBA83400E21E60;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				87683FC42ED3D96C00BCC5D5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 87D71AA32ECBA83400E21E60 /* Products */;
 			projectDirPath = "";
@@ -414,13 +414,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Debug;
@@ -456,13 +457,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = 1;
 				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Release;
@@ -605,6 +607,40 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		87683FC42ED3D96C00BCC5D5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		87683FC52ED3D96C00BCC5D5 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 87683FC42ED3D96C00BCC5D5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		87683FC72ED3D96C00BCC5D5 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 87683FC42ED3D96C00BCC5D5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		87683FC92ED3D96C00BCC5D5 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 87683FC42ED3D96C00BCC5D5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		87683FCB2ED3D96C00BCC5D5 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 87683FC42ED3D96C00BCC5D5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 87D71A9A2ECBA83400E21E60 /* Project object */;
 }

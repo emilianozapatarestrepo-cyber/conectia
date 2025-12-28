@@ -1,17 +1,17 @@
-//
-//  conectiaApp.swift
-//  conectia
-//
-//  Created by Emiliano zapata on 11/17/25.
-//
-
 import SwiftUI
+import FirebaseCore
 
 @main
 struct conectiaApp: App {
+
+    @StateObject private var sessionManager = SessionManager()
+
+    init() { FirebaseApp.configure() }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environmentObject(sessionManager)
         }
     }
 }
