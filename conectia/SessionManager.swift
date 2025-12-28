@@ -74,40 +74,16 @@ final class SessionManager: ObservableObject {
                                 self.currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
                             }
                         } else {
-                            // Fallback: lógica legacy de 'admins'/'residents' por UID.
+                            // Fallback: lógica legacy de 'admins'/'residents' por UID, pero sin promocionar a currentUser (solo roles).
                             await self.loadRoleAndObserveProfile(uid: user.uid)
-                            // Mapeamos a AppUser para no dejar 'currentUser' vacío.
-                            if let r = self.resident {
-                                let data: [String: Any] = [
-                                    "uid": r.uid,
-                                    // Almacenamos como "name" (alineado con seed); AppUser también acepta "fullName".
-                                    "name": r.fullName,
-                                    "email": r.email,
-                                    "role": UserRole.resident.rawValue,
-                                    "buildingId": r.buildingId as Any,
-                                    "isActive": r.isActive,
-                                    "createdAt": r.createdAt as Any,
-                                    "updatedAt": r.updatedAt as Any
-                                ]
-                                self.currentUser = AppUser(id: r.id, data: data)
-                            } else if let a = self.admin {
-                                let data: [String: Any] = [
-                                    "uid": a.uid,
-                                    "name": a.fullName,
-                                    "email": a.email,
-                                    "role": UserRole.admin.rawValue,
-                                    "isActive": a.isActive,
-                                    "createdAt": a.createdAt as Any,
-                                    "updatedAt": a.updatedAt as Any
-                                ]
-                                self.currentUser = AppUser(id: a.id, data: data)
-                            } else {
-                                self.currentUser = nil
-                            }
+                            self.currentUser = nil
+                            self.currentBuilding = nil
                         }
                     } catch {
                         // En caso de error, al menos aplicamos el fallback legacy.
                         await self.loadRoleAndObserveProfile(uid: user.uid)
+                        self.currentUser = nil
+                        self.currentBuilding = nil
                     }
                 } else {
                     self.userRole = nil
@@ -184,10 +160,47 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    /// Refresca el estado de sesión leyendo de Firebase/AuthService.
+    /// Refresca el estado de sesión leyendo de Firebase/AuthService y recuperando el perfil en Firestore.
     func refreshSession() {
-        isAuthenticated = authService.isAuthenticated
-        isCheckingAuth = false
+        Task { @MainActor in
+            isCheckingAuth = true
+            let authUser = Auth.auth().currentUser
+            isAuthenticated = (authUser != nil)
+
+            guard let user = authUser else {
+                userRole = nil
+                isAdmin = false
+                resident = nil
+                admin = nil
+                currentUser = nil
+                currentBuilding = nil
+                cancelProfileListeners()
+                isCheckingAuth = false
+                return
+            }
+
+            do {
+                if let email = user.email,
+                   let appUser = try await FirestoreService.shared.fetchUser(byEmail: email) {
+                    currentUser = appUser
+                    setRole(appUser.role)
+                    if let bid = appUser.buildingId {
+                        currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
+                    } else {
+                        currentBuilding = nil
+                    }
+                } else {
+                    await loadRoleAndObserveProfile(uid: user.uid)
+                    currentUser = nil
+                    currentBuilding = nil
+                }
+            } catch {
+                await loadRoleAndObserveProfile(uid: user.uid)
+                currentUser = nil
+                currentBuilding = nil
+            }
+            isCheckingAuth = false
+        }
     }
 
     // MARK: - Auth actions
@@ -221,6 +234,7 @@ final class SessionManager: ObservableObject {
             resident = nil
             admin = nil
             currentUser = nil
+            currentBuilding = nil
             cancelProfileListeners()
         }
         return result
@@ -228,6 +242,7 @@ final class SessionManager: ObservableObject {
     
     // MARK: - Demo Mode
     
+#if DEBUG
     func loginAsDemoUser() {
         // Bypass auth for demo
         isAuthenticated = true
@@ -259,4 +274,5 @@ final class SessionManager: ObservableObject {
             self.currentBuilding = Building(id: buildingId, data: buildingData)
         }
     }
+#endif
 }

@@ -8,7 +8,7 @@ struct RootView: View {
             // Alineado con el plan: isLoading + currentUser + isAdmin derivado.
             if session.isLoading {
                 LoadingView()
-            } else if let user = session.currentUser {
+            } else if session.isAuthenticated, let user = session.currentUser {
                 if user.role == .admin {
                     AdminTabView()
                 } else if user.role == .staff {
@@ -16,11 +16,11 @@ struct RootView: View {
                 } else {
                     MainTabView() // Home de residente
                 }
+            } else if session.isAuthenticated, session.currentUser == nil {
+                AccessPendingView()
             } else {
                 // Usamos una vista de login alineada con SessionManager/AuthService.
-                NavigationStack {
-                    LoginView()
-                }
+                LoginView()
             }
         }
     }

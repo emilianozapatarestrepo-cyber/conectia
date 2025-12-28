@@ -40,7 +40,7 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 24)
                     
-                    // Botón Login Normal (Firebase) - ESTE ESTÁ ROTO AHORA
+                    // Botón Login normal (Firebase)
                     Button(action: {
                         login()
                     }) {
@@ -54,23 +54,19 @@ struct LoginView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
-                    .background(Color.gray) // Gris porque sabemos que falla
+                    .background(Color.indigo)
                     .foregroundColor(.white)
                     .cornerRadius(12)
                     .padding(.horizontal, 24)
-                    .disabled(true) // Lo desactivamos para que uses el de abajo
-                    
-                    Text("Login con Firebase desactivado temporalmente")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
+                    .disabled(isLoggingIn || email.trimmingCharacters(in: .whitespaces).isEmpty || password.isEmpty)
                     
                     Divider()
                         .padding(.vertical)
                     
-                    // --- EL BOTÓN MÁGICO (MODO DEMO) ---
+                    #if DEBUG
+                    // --- MODO DEMO SOLO EN DEBUG ---
                     Button(action: {
                         print("⚡️ FORZANDO ACCESO DEMO...")
-                        // Llamamos a la función de demo
                         session.loginAsDemoUser()
                     }) {
                         HStack {
@@ -88,12 +84,21 @@ struct LoginView: View {
                         .shadow(color: .indigo.opacity(0.3), radius: 10, x: 0, y: 5)
                     }
                     .padding(.horizontal, 24)
+                    #endif
                     // -----------------------------------
                     
                     Spacer()
                 }
             }
-            .alert("Error", isPresented: .constant(!errorMessage.isEmpty)) {
+            .alert(
+                "Error",
+                isPresented: Binding<Bool>(
+                    get: { !errorMessage.isEmpty },
+                    set: { newValue in
+                        if newValue == false { errorMessage = "" }
+                    }
+                )
+            ) {
                 Button("OK") { errorMessage = "" }
             } message: {
                 Text(errorMessage)
