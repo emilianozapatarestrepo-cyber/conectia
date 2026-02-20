@@ -4,6 +4,7 @@ import Combine
 struct NotificationsListView: View {
     @State private var notifications: [AppNotification] = []
     @State private var cancellables = Set<AnyCancellable>()
+    @EnvironmentObject private var session: SessionManager
     
     var body: some View {
         List {
@@ -26,7 +27,11 @@ struct NotificationsListView: View {
         }
         .navigationTitle("Avisos")
         .onAppear {
-            FirestoreService.shared.listenNotifications(audience: "residents")
+            guard let buildingId = session.currentUser?.buildingId else {
+                print("Tenant guard: NotificationsListView missing buildingId")
+                return
+            }
+            FirestoreService.shared.listenNotifications(audience: "residents", buildingId: buildingId)
                 .receive(on: RunLoop.main)
                 .sink(receiveCompletion: { _ in }, receiveValue: { self.notifications = $0 })
                 .store(in: &cancellables)

@@ -11,9 +11,9 @@ final class TicketsViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let fs = FirestoreService.shared
 
-    func startListening(userId: String, isAdmin: Bool) {
+    func startListening(userId: String, isAdmin: Bool, buildingId: String?) {
         cancellables.removeAll()
-        let publisher: AnyPublisher<[Ticket], Error> = isAdmin ? fs.listenAllTickets() : fs.listenTicketsForUser(userId)
+        let publisher: AnyPublisher<[Ticket], Error> = isAdmin ? fs.listenAllTickets(buildingId: buildingId) : fs.listenTicketsForUser(userId, buildingId: buildingId)
         publisher
             .receive(on: RunLoop.main)
             .sink { [weak self] completion in
@@ -74,4 +74,3 @@ final class TicketsViewModel: ObservableObject {
         }
     }
 }
-

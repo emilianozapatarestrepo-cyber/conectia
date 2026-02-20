@@ -98,14 +98,16 @@ struct MyReservationsView: View {
                 // 1. Obtener buildings/units para saber mi UnitId
                 // TODO: Optimizar esto en un AppState o similar.
                 var myUnitId: String? = nil
-                if let buildingId = session.currentUser?.buildingId {
-                     let units = try await FirestoreService.shared.fetchUnits(for: buildingId)
-                     myUnitId = units.first(where: { $0.residentId == uid })?.id
-                     
-                     // Cargar amenities también para tener nombres
-                     let ams = try await FirestoreService.shared.fetchAmenities(for: buildingId)
-                     self.amenitiesDict = Dictionary(uniqueKeysWithValues: ams.map { ($0.id ?? "", $0) })
+                guard let buildingId = session.currentUser?.buildingId else {
+                    isLoading = false
+                    return
                 }
+                let units = try await FirestoreService.shared.fetchUnits(for: buildingId)
+                myUnitId = units.first(where: { $0.residentId == uid })?.id
+                
+                // Cargar amenities también para tener nombres
+                let ams = try await FirestoreService.shared.fetchAmenities(for: buildingId)
+                self.amenitiesDict = Dictionary(uniqueKeysWithValues: ams.map { ($0.id ?? "", $0) })
                 
                 guard let unitId = myUnitId else {
                     isLoading = false
@@ -113,7 +115,7 @@ struct MyReservationsView: View {
                 }
                 
                 // 2. Escuchar reservas de mi unidad
-                FirestoreService.shared.listenReservations(unitId: unitId)
+                FirestoreService.shared.listenReservations(unitId: unitId, buildingId: buildingId)
                     .receive(on: RunLoop.main)
                     .sink(receiveCompletion: { _ in }, receiveValue: { items in
                         self.reservations = items

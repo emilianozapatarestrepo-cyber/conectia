@@ -18,7 +18,10 @@ struct SeedService {
          guard let uid = user.id else { return }
          
          // 1. Update User Profile (Maria Gonzalez) & Building
-         let buildingId = user.buildingId ?? "demo_building_01"
+         guard let buildingId = user.buildingId else {
+             print("SeedService: missing buildingId, aborting seed.")
+             return
+         }
          
          // Ensure Demo Building exists as Condo
          // Init: id, data OR memberwise

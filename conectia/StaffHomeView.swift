@@ -52,16 +52,25 @@ struct StaffHomeView: View {
     
     private func loadData() {
         guard let uid = session.currentUser?.uid else { return }
+        guard let buildingId = session.currentUser?.buildingId else {
+            print("Tenant guard: StaffHomeView missing buildingId")
+            return
+        }
         
         // 1. Mis tickets asignados
-        FirestoreService.shared.listenTicketsFiltered(assignedAdminId: uid, orderBy: "priority", descending: true)
+        FirestoreService.shared.listenTicketsFiltered(buildingId: buildingId,
+                                                     assignedAdminId: uid,
+                                                     orderBy: "priority",
+                                                     descending: true)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { self.assignedTickets = $0 })
             .store(in: &cancellables)
             
         // 2. Tickets abiertos sin asignar (Pool)
-        // Nota: Idealmente filtramos por buildingId también.
-        FirestoreService.shared.listenTicketsFiltered(status: .open, orderBy: "createdAt", descending: true)
+        FirestoreService.shared.listenTicketsFiltered(buildingId: buildingId,
+                                                     status: .open,
+                                                     orderBy: "createdAt",
+                                                     descending: true)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { allOpen in
                 // Filtramos en memoria los que no tienen assignee

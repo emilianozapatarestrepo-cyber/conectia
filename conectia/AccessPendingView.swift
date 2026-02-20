@@ -8,14 +8,14 @@ struct AccessPendingView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "building.2.crop.circle")
+            Image(systemName: "clock.badge.checkmark")
                 .font(.system(size: 50))
-                .foregroundColor(.purple)
-            Text("Tu cuenta no está vinculada a un condominio.")
+                .foregroundColor(.indigo)
+            Text("Bienvenido a Conectia")
                 .font(.title2)
                 .fontWeight(.semibold)
                 .multilineTextAlignment(.center)
-            Text("Solicita acceso al administrador o usa un invite.")
+            Text("Gracias por registrarte. Tu solicitud está siendo revisada por el administrador. Te daremos acceso a tu unidad tan pronto sea aprobado.")
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
@@ -24,7 +24,7 @@ struct AccessPendingView: View {
                 Button {
                     Task {
                         isRetrying = true
-                        session.refreshSession()
+                        await session.refreshSession()
                         isRetrying = false
                     }
                 } label: {

@@ -158,7 +158,7 @@ struct BookAmenityView: View {
                 
                 // 2. Cargar reservas existentes para chequear disponibilidad
                 if let id = amenity.id {
-                    self.existingReservations = try await FirestoreService.shared.fetchReservations(forAmenity: id)
+                    self.existingReservations = try await FirestoreService.shared.fetchReservations(forAmenity: id, buildingId: amenity.buildingId)
                 }
                 
                 isLoading = false

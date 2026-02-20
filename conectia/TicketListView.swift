@@ -50,7 +50,8 @@ struct TicketListView: View {
         .onAppear {
             let isAdmin = (session.currentUser?.role == .admin) || (session.userRole == .admin)
             let uid = AuthService.shared.currentUserUID ?? ""
-            vm.startListening(userId: uid, isAdmin: isAdmin)
+            let buildingId = session.currentUser?.buildingId
+            vm.startListening(userId: uid, isAdmin: isAdmin, buildingId: buildingId)
         }
         .sheet(isPresented: $showingNew) {
             NavigationStack {

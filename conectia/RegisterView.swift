@@ -83,36 +83,25 @@ struct RegisterView: View {
     private func handleRegister() async {
         guard validateInputs() else { return }
         isLoading = true
+        
         let trimmedEmail = email.trimmingCharacters(in: .whitespaces)
-        let result = await session.register(email: trimmedEmail, password: password)
+        let result = await session.register(
+            email: trimmedEmail, 
+            password: password,
+            fullName: nombre,
+            role: .resident
+        )
+        
         switch result {
         case .success:
-            // Create resident profile with current UID and defaults
-            if let uid = AuthService.shared.currentUserUID {
-                let profile = Resident(
-                    id: uid,
-                    uid: uid,
-                    fullName: nombre,
-                    email: trimmedEmail,
-                    role: .resident,
-                    buildingId: nil,
-                    unitNumber: nil,
-                    phone: telefono,
-                    photoURL: nil,
-                    isActive: true,
-                    createdAt: nil,
-                    updatedAt: nil
-                )
-                do {
-                    try await FirestoreService.shared.createResident(uid: uid, resident: profile)
-                } catch {
-                    presentError("Cuenta creada pero no se pudo guardar el perfil: \(error.localizedDescription)")
-                }
-            }
-            session.refreshSession()
+            // ✅ El documento users/{uid} ya fue creado por SessionManager
+            // Ya NO creamos Resident legacy aquí
+            break
+            
         case .failure(let error):
             presentError(error.localizedDescription)
         }
+        
         isLoading = false
     }
 

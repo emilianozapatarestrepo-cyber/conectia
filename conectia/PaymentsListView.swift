@@ -6,9 +6,9 @@ final class PaymentsViewModel: ObservableObject {
     @Published var errorMessage: String?
     private var cancellables = Set<AnyCancellable>()
 
-    func start(uid: String) {
+    func start(uid: String, buildingId: String?) {
         cancellables.removeAll()
-        FirestoreService.shared.listenPaymentsForUser(uid)
+        FirestoreService.shared.listenPaymentsForUser(uid, buildingId: buildingId)
             .receive(on: RunLoop.main)
             .sink { [weak self] completion in
                 if case .failure(let error) = completion {
@@ -27,6 +27,7 @@ final class PaymentsViewModel: ObservableObject {
 
 struct PaymentsListView: View {
     @StateObject private var vm = PaymentsViewModel()
+    @EnvironmentObject private var session: SessionManager
 
     var body: some View {
         List {
@@ -67,7 +68,8 @@ struct PaymentsListView: View {
         .navigationTitle("Pagos")
         .onAppear {
             if let uid = AuthService.shared.currentUserUID {
-                vm.start(uid: uid)
+                let buildingId = session.currentUser?.buildingId
+                vm.start(uid: uid, buildingId: buildingId)
             }
         }
     }
@@ -82,4 +84,3 @@ private extension Payment {
         }
     }
 }
-

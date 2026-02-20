@@ -10,46 +10,38 @@ struct LoginView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Fondo limpio
                 Color.white.ignoresSafeArea()
-                
+
                 VStack(spacing: 24) {
                     Spacer()
-                    
-                    // Título
+
                     VStack(spacing: 8) {
                         Text("Conectia")
                             .font(.system(size: 32, weight: .heavy, design: .rounded))
                             .foregroundColor(.indigo)
-                        
+
                         Text("Bienvenida a tu comunidad")
                             .font(.subheadline)
                             .foregroundColor(.gray)
                     }
                     .padding(.bottom, 20)
-                    
-                    // Campos de Texto
+
                     VStack(spacing: 16) {
                         TextField("Correo electrónico", text: $email)
                             .textFieldStyle(.roundedBorder)
                             .textInputAutocapitalization(.never)
                             .keyboardType(.emailAddress)
-                        
+
                         SecureField("Contraseña", text: $password)
                             .textFieldStyle(.roundedBorder)
                     }
                     .padding(.horizontal, 24)
-                    
-                    // Botón Login normal (Firebase)
-                    Button(action: {
-                        login()
-                    }) {
+
+                    Button(action: { login() }) {
                         if isLoggingIn {
-                            ProgressView()
-                                .tint(.white)
+                            ProgressView().tint(.white)
                         } else {
-                            Text("Iniciar Sesión")
-                                .fontWeight(.semibold)
+                            Text("Iniciar Sesión").fontWeight(.semibold)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -58,35 +50,23 @@ struct LoginView: View {
                     .foregroundColor(.white)
                     .cornerRadius(12)
                     .padding(.horizontal, 24)
-                    .disabled(isLoggingIn || email.trimmingCharacters(in: .whitespaces).isEmpty || password.isEmpty)
-                    
-                    Divider()
-                        .padding(.vertical)
-                    
-                    #if DEBUG
-                    // --- MODO DEMO SOLO EN DEBUG ---
-                    Button(action: {
-                        print("⚡️ FORZANDO ACCESO DEMO...")
-                        session.loginAsDemoUser()
-                    }) {
-                        HStack {
-                            Image(systemName: "bolt.fill")
-                            Text("ENTRAR MODO DEMO (MARÍA)")
-                                .fontWeight(.bold)
+                    .disabled(isLoggingIn || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
+
+                    // Acciones secundarias (mínimo profesional)
+                    VStack(spacing: 10) {
+                        NavigationLink("Crear cuenta") {
+                            RegisterView()
+                                .environmentObject(session)
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(
-                            LinearGradient(colors: [Color.indigo, Color.purple], startPoint: .leading, endPoint: .trailing)
-                        )
-                        .foregroundColor(.white)
-                        .cornerRadius(16)
-                        .shadow(color: .indigo.opacity(0.3), radius: 10, x: 0, y: 5)
+
+                        NavigationLink("Olvidé mi contraseña") {
+                            ForgotPasswordView()
+                                .environmentObject(session)
+                        }
                     }
-                    .padding(.horizontal, 24)
-                    #endif
-                    // -----------------------------------
-                    
+                    .font(.subheadline)
+                    .foregroundColor(.indigo)
+
                     Spacer()
                 }
             }
@@ -105,16 +85,21 @@ struct LoginView: View {
             }
         }
     }
-    
+
     func login() {
         Task {
             isLoggingIn = true
-            do {
-                try await session.login(email: email, password: password)
-            } catch {
+            print("🔐 [LoginView] login() started")
+            let result = await session.login(email: email, password: password)
+            switch result {
+            case .success:
+                print("✅ [LoginView] login succeeded")
+            case .failure(let error):
+                print("❌ [LoginView] login failed: \(error.localizedDescription)")
                 errorMessage = error.localizedDescription
             }
             isLoggingIn = false
         }
     }
 }
+

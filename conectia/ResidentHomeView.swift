@@ -141,12 +141,16 @@ struct ResidentHomeView: View {
 
     private func subscribe() {
         guard let uid = AuthService.shared.currentUserUID else { return }
-        FirestoreService.shared.listenPaymentsForUser(uid)
+        guard let buildingId = session.currentUser?.buildingId else {
+            print("Tenant guard: ResidentHomeView missing buildingId")
+            return
+        }
+        FirestoreService.shared.listenPaymentsForUser(uid, buildingId: buildingId)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { self.payments = $0 })
             .store(in: &cancellables)
 
-        FirestoreService.shared.listenNotifications(audience: "residents")
+        FirestoreService.shared.listenNotifications(audience: "residents", buildingId: buildingId)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { self.notifications = $0 })
             .store(in: &cancellables)

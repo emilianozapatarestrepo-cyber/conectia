@@ -2,6 +2,22 @@ import Foundation
 import Combine
 import FirebaseFirestore
 
+// MARK: - Errors
+
+enum TenantError: LocalizedError {
+    case missingBuildingId
+    case invalidBuildingId(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .missingBuildingId:
+            return "No tenant context: buildingId is nil"
+        case .invalidBuildingId(let id):
+            return "Invalid buildingId: '\(id)'"
+        }
+    }
+}
+
 // Protocolo común para mapear modelos a/desde Firestore sin FirebaseFirestoreSwift.
 protocol FirestoreMappable {
     init?(id: String?, data: [String: Any])
@@ -37,6 +53,84 @@ enum BuildingType: String, Codable, CaseIterable {
     case multifamily    // Renta Institucional
 }
 
+// Estado de acceso del usuario
+enum AccessStatus: String, Codable, CaseIterable {
+    case onboarding       // Recién registrado, sin asignar
+    case pendingApproval  // Esperando aprobación del admin
+    case active           // Aprobado y activo
+}
+
+// Tipo de ocupante para solicitud de acceso
+enum OccupantType: String, Codable, CaseIterable {
+    case owner    // Propietario
+    case tenant   // Inquilino/Arrendatario
+}
+
+// Unidad (colección raíz units)
+struct OnboardingUnit: Codable, Identifiable, Equatable, FirestoreMappable {
+    var id: String?
+    var label: String
+    var buildingId: String
+
+    init?(id: String?, data: [String: Any]) {
+        guard let label = data["label"] as? String,
+              let buildingId = data["buildingId"] as? String else { return nil }
+        self.id = id
+        self.label = label
+        self.buildingId = buildingId
+    }
+    func toFirestoreData() -> [String: Any] {
+        ["label": label, "buildingId": buildingId]
+    }
+}
+
+// Solicitud de acceso a unidad (colección raíz accessRequests)
+struct AccessRequest: Codable, Identifiable, Equatable, FirestoreMappable {
+    var id: String?
+    var requesterUid: String
+    var requestedUnitId: String
+    var requestedBuildingId: String
+    var requestedOccupancyRole: OccupantType
+    var status: String
+    var createdAt: Date?
+
+    init(requesterUid: String, requestedUnitId: String, requestedBuildingId: String, requestedOccupancyRole: OccupantType) {
+        self.requesterUid = requesterUid
+        self.requestedUnitId = requestedUnitId
+        self.requestedBuildingId = requestedBuildingId
+        self.requestedOccupancyRole = requestedOccupancyRole
+        self.status = "pending"
+    }
+
+    init?(id: String?, data: [String: Any]) {
+        guard let requesterUid = data["requesterUid"] as? String,
+              let requestedUnitId = data["requestedUnitId"] as? String,
+              let requestedBuildingId = data["requestedBuildingId"] as? String else { return nil }
+        self.id = id
+        self.requesterUid = requesterUid
+        self.requestedUnitId = requestedUnitId
+        self.requestedBuildingId = requestedBuildingId
+        if let r = data["requestedOccupancyRole"] as? String, let t = OccupantType(rawValue: r) {
+            self.requestedOccupancyRole = t
+        } else {
+            self.requestedOccupancyRole = .tenant
+        }
+        self.status = data["status"] as? String ?? "pending"
+        self.createdAt = dateFrom(data["createdAt"])
+    }
+
+    func toFirestoreData() -> [String: Any] {
+        [
+            "requesterUid": requesterUid,
+            "requestedUnitId": requestedUnitId,
+            "requestedBuildingId": requestedBuildingId,
+            "requestedOccupancyRole": requestedOccupancyRole.rawValue,
+            "status": status,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+    }
+}
+
 // Modelo unificado de usuario (colección "users").
 // Nota: mantenemos fullName pero alineamos el almacenamiento a "name" en Firestore.
 // También añadimos buildingId para alinear con el seed.
@@ -45,23 +139,69 @@ struct AppUser: Codable, Identifiable, Equatable, FirestoreMappable {
     var uid: String
     var fullName: String            // Se codifica como "name" para alinear con el seed.
     var email: String
+    var emailLowercased: String     // Nuevo: email normalizado para queries
     var role: UserRole
     var buildingId: String?         // Campo recomendado por el plan/seed.
     var unitId: String?             // Added: Unit ID needed for voting/reservations
     var photoURL: String?           // Nuevo: soporte para foto de perfil
     var isActive: Bool
+    var accessStatus: AccessStatus  // Estado de acceso del usuario
     var createdAt: Date?
     var updatedAt: Date?
 
+    // Explicit memberwise initializer for creating new users (e.g., registration)
+    init(
+        id: String? = nil,
+        uid: String,
+        fullName: String,
+        email: String,
+        emailLowercased: String? = nil,
+        role: UserRole,
+        buildingId: String? = nil,
+        unitId: String? = nil,
+        photoURL: String? = nil,
+        isActive: Bool,
+        accessStatus: AccessStatus = .onboarding,
+        createdAt: Date? = nil,
+        updatedAt: Date? = nil
+    ) {
+        self.id = id
+        self.uid = uid
+        self.fullName = fullName
+        self.email = email
+        self.emailLowercased = emailLowercased ?? email.lowercased().trimmingCharacters(in: .whitespaces)
+        self.role = role
+        self.buildingId = buildingId
+        self.unitId = unitId
+        self.photoURL = photoURL
+        self.isActive = isActive
+        self.accessStatus = accessStatus
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     // FirestoreMappable
     init?(id: String?, data: [String : Any]) {
-        guard
-            let uid = data["uid"] as? String,
-            let email = data["email"] as? String,
-            let roleStr = data["role"] as? String,
-            let role = UserRole(rawValue: roleStr),
-            let isActive = data["isActive"] as? Bool
-        else { return nil }
+        guard let uid = data["uid"] as? String else {
+            print("❌ AppUser decode failed: missing 'uid' in doc \(id ?? "unknown")")
+            return nil
+        }
+        
+        guard let email = data["email"] as? String else {
+            print("❌ AppUser decode failed: missing 'email' in doc \(id ?? "unknown")")
+            return nil
+        }
+        
+        guard let roleStr = data["role"] as? String,
+              let role = UserRole(rawValue: roleStr) else {
+            print("❌ AppUser decode failed: invalid 'role' (\(data["role"] ?? "nil")) in doc \(id ?? "unknown")")
+            return nil
+        }
+        
+        guard let isActive = data["isActive"] as? Bool else {
+            print("❌ AppUser decode failed: missing 'isActive' in doc \(id ?? "unknown")")
+            return nil
+        }
 
         // "name" (seed) o "fullName" (proyecto actual)
         let name = (data["name"] as? String) ?? (data["fullName"] as? String) ?? ""
@@ -70,12 +210,59 @@ struct AppUser: Codable, Identifiable, Equatable, FirestoreMappable {
         self.uid = uid
         self.fullName = name
         self.email = email
+        self.emailLowercased = email.lowercased().trimmingCharacters(in: .whitespaces)
         self.role = role
 
         self.buildingId = data["buildingId"] as? String
-        self.unitId = data["unitId"] as? String // Added unitId
+        self.unitId = data["unitId"] as? String
+        
+        #if DEBUG
+        if self.buildingId == nil {
+            print("🟡 [AppUser.init] buildingId decoded as nil for user \(id ?? "unknown")")
+        }
+        if self.unitId == nil {
+            print("🟡 [AppUser.init] unitId decoded as nil for user \(id ?? "unknown")")
+        }
+        #endif // Added unitId
         self.photoURL = data["photoURL"] as? String
         self.isActive = isActive
+        
+        // Parse accessStatus with normalization and DEBUG logging
+        let rawStatusStr = data["accessStatus"] as? String
+        #if DEBUG
+        print("🔍 [AppUser.init] Raw accessStatus: '\(rawStatusStr ?? "nil")' for user \(id ?? "unknown")")
+        #endif
+        
+        if let statusStr = rawStatusStr {
+            // Normalize: lowercase, remove underscores/hyphens/spaces
+            let normalized = statusStr.lowercased()
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: "-", with: "")
+                .replacingOccurrences(of: " ", with: "")
+            
+            switch normalized {
+            case "active":
+                self.accessStatus = .active
+            case "pendingapproval":
+                self.accessStatus = .pendingApproval
+            case "onboarding":
+                self.accessStatus = .onboarding
+            default:
+                // Fallback: admin with buildingId -> .active, else .onboarding
+                self.accessStatus = (role == .admin && self.buildingId != nil) ? .active : .onboarding
+                #if DEBUG
+                print("⚠️  [AppUser.init] Unknown accessStatus '\(normalized)', fallback to \(self.accessStatus)")
+                #endif
+            }
+        } else {
+            // Fallback: admin with buildingId -> .active, else .onboarding
+            self.accessStatus = (role == .admin && self.buildingId != nil) ? .active : .onboarding
+        }
+        
+        #if DEBUG
+        print("✅ [AppUser.init] Parsed accessStatus: \(self.accessStatus) | role: \(role) | buildingId: \(self.buildingId ?? "nil") | unitId: \(self.unitId ?? "nil")")
+        #endif
+        
         self.createdAt = dateFrom(data["createdAt"])
         self.updatedAt = dateFrom(data["updatedAt"])
     }
@@ -86,8 +273,10 @@ struct AppUser: Codable, Identifiable, Equatable, FirestoreMappable {
             // Escribimos como "name" (alineado con seed)
             "name": fullName,
             "email": email,
+            "emailLowercased": emailLowercased,
             "role": role.rawValue,
-            "isActive": isActive
+            "isActive": isActive,
+            "accessStatus": accessStatus.rawValue
         ]
         if let buildingId { dict["buildingId"] = buildingId }
         if let unitId { dict["unitId"] = unitId } // Added unitId
@@ -250,6 +439,7 @@ struct Building: Codable, Identifiable, Equatable, FirestoreMappable {
     var id: String?
     var name: String
     var type: BuildingType = .condo // Default para migración
+    var hasTowers: Bool = false     // Indica si el building tiene torres
     var address: String?
     var adminEmail: String? = nil  // Alineado con el plan/seed (opcional para no romper).
     var notes: String?
@@ -263,6 +453,7 @@ struct Building: Codable, Identifiable, Equatable, FirestoreMappable {
         if let typeStr = data["type"] as? String, let t = BuildingType(rawValue: typeStr) {
             self.type = t
         }
+        self.hasTowers = data["hasTowers"] as? Bool ?? false
         self.address = data["address"] as? String
         self.adminEmail = data["adminEmail"] as? String
         self.notes = data["notes"] as? String
@@ -273,7 +464,8 @@ struct Building: Codable, Identifiable, Equatable, FirestoreMappable {
     func toFirestoreData() -> [String : Any] {
         var dict: [String: Any] = [
             "name": name,
-            "type": type.rawValue
+            "type": type.rawValue,
+            "hasTowers": hasTowers
         ]
         if let address { dict["address"] = address }
         if let adminEmail { dict["adminEmail"] = adminEmail }

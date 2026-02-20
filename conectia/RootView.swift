@@ -5,21 +5,33 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            // Alineado con el plan: isLoading + currentUser + isAdmin derivado.
             if session.isLoading {
                 LoadingView()
             } else if session.isAuthenticated, let user = session.currentUser {
-                if user.role == .admin {
-                    AdminTabView()
-                } else if user.role == .staff {
-                    StaffHomeView()
-                } else {
-                    MainTabView() // Home de residente
+                // Usuario autenticado CON documento - rutear por accessStatus
+                switch user.accessStatus {
+                case .onboarding:
+                    OnboardingView()
+                case .pendingApproval:
+                    // Admin with buildingId -> bypass pending and go to admin view
+                    if user.role == .admin && user.buildingId != nil {
+                        AdminTabView()
+                    } else {
+                        AccessPendingView()
+                    }
+                case .active:
+                    if user.role == .admin {
+                        AdminTabView()
+                    } else if user.role == .staff {
+                        StaffHomeView()
+                    } else {
+                        MainTabView()
+                    }
                 }
-            } else if session.isAuthenticated, session.currentUser == nil {
+            } else if session.isAuthenticated {
+                // Autenticado pero doc no cargó aún
                 AccessPendingView()
             } else {
-                // Usamos una vista de login alineada con SessionManager/AuthService.
                 LoginView()
             }
         }

@@ -11,6 +11,35 @@ final class FirestoreService {
 
     private let db = Firestore.firestore()
 
+    // MARK: - Tenant guard helpers
+
+    private func tenantErrorPublisher<T>(reason: String) -> AnyPublisher<[T], Error> {
+        #if DEBUG
+        print("🔴 Tenant guard failed: \(reason)")
+        return Fail(error: TenantError.missingBuildingId)
+            .eraseToAnyPublisher()
+        #else
+        print("⚠️ Tenant guard: \(reason)")
+        return Empty(completeImmediately: true)
+            .eraseToAnyPublisher()
+        #endif
+    }
+
+    // Alias para compatibilidad (todas las llamadas actuales usan este nombre)
+    private func emptyTenantPublisher<T>(reason: String) -> AnyPublisher<[T], Error> {
+        return tenantErrorPublisher(reason: reason)
+    }
+    
+    private func hasTenant(_ buildingId: String?) -> String? {
+        guard let bid = buildingId, !bid.isEmpty else {
+            #if DEBUG
+            print("⚠️ [hasTenant] Validation failed - buildingId is \(buildingId == nil ? "nil" : "empty string")")
+            #endif
+            return nil
+        }
+        return bid
+    }
+
     // MARK: - Generic helpers
 
     func setDocument<T: FirestoreMappable>(_ value: T, in collection: String, id: String) async throws {
@@ -119,15 +148,34 @@ final class FirestoreService {
     // MARK: - Users (colección unificada "users")
 
     func getUser(id: String) async throws -> AppUser? {
-        try await getDocument(collection: "users", id: id)
+        let snapshot = try await db.collection("users").document(id).getDocument()
+        guard let data = snapshot.data() else { 
+            #if DEBUG
+            print("🔴 [FirestoreService.getUser] No document found for users/\(id)")
+            #endif
+            return nil 
+        }
+        
+        #if DEBUG
+        print("🟢 [FirestoreService.getUser] RAW data for users/\(id):")
+        print("   - buildingId: \(data["buildingId"] ?? "missing")")
+        print("   - unitId: \(data["unitId"] ?? "missing")")
+        print("   - email: \(data["email"] ?? "missing")")
+        print("   - role: \(data["role"] ?? "missing")")
+        #endif
+        
+        return AppUser(id: snapshot.documentID, data: data)
     }
 
     /// Busca un usuario por email en la colección "users".
     func fetchUser(byEmail email: String) async throws -> AppUser? {
+        let normalizedEmail = email.lowercased().trimmingCharacters(in: .whitespaces)
+        
         let snapshot = try await db.collection("users")
-            .whereField("email", isEqualTo: email)
+            .whereField("emailLowercased", isEqualTo: normalizedEmail)
             .limit(to: 1)
             .getDocuments()
+        
         guard let doc = snapshot.documents.first else { return nil }
         return AppUser(id: doc.documentID, data: doc.data())
     }
@@ -146,6 +194,44 @@ final class FirestoreService {
 
     func updateUser(id: String, user: AppUser) async throws {
         try await setDocument(user, in: "users", id: id)
+    }
+
+    func updateUserAccessStatus(id: String, status: AccessStatus) async throws {
+        try await db.collection("users").document(id).updateData([
+            "accessStatus": status.rawValue,
+            "updatedAt": FieldValue.serverTimestamp()
+        ])
+    }
+
+    // MARK: - Onboarding Catalog
+
+    func listBuildings() async throws -> [Building] {
+        let snapshot = try await db.collection("buildings").order(by: "name").getDocuments()
+        return snapshot.documents.compactMap { Building(id: $0.documentID, data: $0.data()) }
+    }
+
+    func listUnits(buildingId: String) async throws -> [OnboardingUnit] {
+        let snapshot = try await db.collection("units")
+            .whereField("buildingId", isEqualTo: buildingId)
+            .order(by: "label")
+            .getDocuments()
+        return snapshot.documents.compactMap { OnboardingUnit(id: $0.documentID, data: $0.data()) }
+    }
+
+    // MARK: - Access Requests
+
+    func createAccessRequest(_ request: AccessRequest) async throws -> String {
+        try await addDocument(request, to: "accessRequests")
+    }
+
+    func updateUserPendingApproval(uid: String, buildingId: String, unitId: String, occupancyRole: OccupantType) async throws {
+        try await db.collection("users").document(uid).updateData([
+            "accessStatus": AccessStatus.pendingApproval.rawValue,
+            "requestedBuildingId": buildingId,
+            "requestedUnitId": unitId,
+            "requestedOccupancyRole": occupancyRole.rawValue,
+            "updatedAt": FieldValue.serverTimestamp()
+        ])
     }
 
     // MARK: - Residents/Admins (legacy)
@@ -201,27 +287,54 @@ final class FirestoreService {
 
     // MARK: - Tickets
 
-    func listenTicketsForUser(_ uid: String) -> AnyPublisher<[Ticket], Error> {
-        listenCollection(collection: "tickets", whereField: "userId", isEqualTo: uid, orderBy: "createdAt", descending: true)
+    func listenTicketsForUser(_ uid: String, buildingId: String?) -> AnyPublisher<[Ticket], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenTicketsForUser missing buildingId")
+        }
+        let subject = PassthroughSubject<[Ticket], Error>()
+        let query = db.collection("tickets")
+            .whereField("buildingId", isEqualTo: bid)
+            .whereField("userId", isEqualTo: uid)
+            .order(by: "createdAt", descending: true)
+
+        let listener = query.addSnapshotListener { snapshot, error in
+            if let error { subject.send(completion: .failure(error)); return }
+            let models: [Ticket] = snapshot?.documents.compactMap { Ticket(id: $0.documentID, data: $0.data()) } ?? []
+            subject.send(models)
+        }
+        return subject
+            .handleEvents(receiveCancel: { listener.remove() })
+            .eraseToAnyPublisher()
     }
 
-    func listenAllTickets() -> AnyPublisher<[Ticket], Error> {
-        listenCollection(collection: "tickets", orderBy: "createdAt", descending: true)
+    func listenAllTickets(buildingId: String?) -> AnyPublisher<[Ticket], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenAllTickets missing buildingId")
+        }
+        return listenCollection(
+            collection: "tickets",
+            whereField: "buildingId",
+            isEqualTo: bid,
+            orderBy: "createdAt",
+            descending: true
+        )
     }
 
     func listenTicketsFiltered(
         userId: String? = nil,
-        buildingId: String? = nil,
+        buildingId: String?,
         status: TicketStatus? = nil,
         assignedAdminId: String? = nil,
         orderBy: String = "createdAt",
         descending: Bool = true,
         limit: Int? = nil
     ) -> AnyPublisher<[Ticket], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenTicketsFiltered missing buildingId")
+        }
         let subject = PassthroughSubject<[Ticket], Error>()
-        var query: Query = db.collection("tickets")
+        var query: Query = db.collection("tickets").whereField("buildingId", isEqualTo: bid)
         if let userId { query = query.whereField("userId", isEqualTo: userId) }
-        if let buildingId { query = query.whereField("buildingId", isEqualTo: buildingId) }
         if let status { query = query.whereField("status", isEqualTo: status.rawValue) }
         if let assignedAdminId { query = query.whereField("assignedAdminId", isEqualTo: assignedAdminId) }
         query = query.order(by: orderBy, descending: descending)
@@ -252,8 +365,13 @@ final class FirestoreService {
     }
 
     // Lectura puntual (async) de tickets
-    func fetchTickets(forUser uid: String) async throws -> [Ticket] {
+    func fetchTickets(forUser uid: String, buildingId: String?) async throws -> [Ticket] {
+        guard let bid = hasTenant(buildingId) else {
+            print("Tenant guard: fetchTickets missing buildingId")
+            return []
+        }
         let snapshot = try await db.collection("tickets")
+            .whereField("buildingId", isEqualTo: bid)
             .whereField("userId", isEqualTo: uid)
             .order(by: "createdAt", descending: true)
             .getDocuments()
@@ -262,26 +380,48 @@ final class FirestoreService {
 
     // MARK: - Payments
 
-    func listenPaymentsForUser(_ uid: String) -> AnyPublisher<[Payment], Error> {
-        listenCollection(collection: "payments", whereField: "userId", isEqualTo: uid, orderBy: "createdAt", descending: true)
+    func listenPaymentsForUser(_ uid: String, buildingId: String?) -> AnyPublisher<[Payment], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenPaymentsForUser missing buildingId")
+        }
+        return listenCollection(
+            collection: "payments",
+            whereField: "buildingId",
+            isEqualTo: bid,
+            orderBy: "createdAt",
+            descending: true
+        )
+        .map { $0.filter { $0.userId == uid } }
+        .eraseToAnyPublisher()
     }
 
-    func listenAllPayments() -> AnyPublisher<[Payment], Error> {
-        listenCollection(collection: "payments", orderBy: "createdAt", descending: true)
+    func listenAllPayments(buildingId: String?) -> AnyPublisher<[Payment], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenAllPayments missing buildingId")
+        }
+        return listenCollection(
+            collection: "payments",
+            whereField: "buildingId",
+            isEqualTo: bid,
+            orderBy: "createdAt",
+            descending: true
+        )
     }
 
     func listenPaymentsFiltered(
         userId: String? = nil,
-        buildingId: String? = nil,
+        buildingId: String?,
         status: PaymentStatus? = nil,
         orderBy: String = "createdAt",
         descending: Bool = true,
         limit: Int? = nil
     ) -> AnyPublisher<[Payment], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenPaymentsFiltered missing buildingId")
+        }
         let subject = PassthroughSubject<[Payment], Error>()
-        var query: Query = db.collection("payments")
+        var query: Query = db.collection("payments").whereField("buildingId", isEqualTo: bid)
         if let userId { query = query.whereField("userId", isEqualTo: userId) }
-        if let buildingId { query = query.whereField("buildingId", isEqualTo: buildingId) }
         if let status { query = query.whereField("status", isEqualTo: status.rawValue) }
         query = query.order(by: "createdAt", descending: descending)
         if let limit { query = query.limit(to: limit) }
@@ -388,17 +528,20 @@ final class FirestoreService {
 
     // MARK: - Amenities
 
-    func listenAmenities(buildingId: String? = nil) -> AnyPublisher<[Amenity], Error> {
-        if let buildingId {
-            return listenCollection(collection: "amenities", whereField: "buildingId", isEqualTo: buildingId, orderBy: "createdAt", descending: false)
-        } else {
-            return listenCollection(collection: "amenities", orderBy: "createdAt", descending: false)
+    func listenAmenities(buildingId: String?) -> AnyPublisher<[Amenity], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenAmenities missing buildingId")
         }
+        return listenCollection(collection: "amenities", whereField: "buildingId", isEqualTo: bid, orderBy: "createdAt", descending: false)
     }
 
-    func fetchAmenities(for buildingId: String) async throws -> [Amenity] {
+    func fetchAmenities(for buildingId: String?) async throws -> [Amenity] {
+        guard let bid = hasTenant(buildingId) else {
+            print("Tenant guard: fetchAmenities missing buildingId")
+            return []
+        }
         let snapshot = try await db.collection("amenities")
-            .whereField("buildingId", isEqualTo: buildingId)
+            .whereField("buildingId", isEqualTo: bid)
             .order(by: "createdAt", descending: false)
             .getDocuments()
         return snapshot.documents.compactMap { Amenity(id: $0.documentID, data: $0.data()) }
@@ -418,9 +561,12 @@ final class FirestoreService {
 
     // MARK: - Reservations
 
-    func listenReservations(amenityId: String? = nil, unitId: String? = nil) -> AnyPublisher<[Reservation], Error> {
+    func listenReservations(amenityId: String? = nil, unitId: String? = nil, buildingId: String?) -> AnyPublisher<[Reservation], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenReservations missing buildingId")
+        }
         let subject = PassthroughSubject<[Reservation], Error>()
-        var query: Query = db.collection("reservations")
+        var query: Query = db.collection("reservations").whereField("buildingId", isEqualTo: bid)
         if let amenityId { query = query.whereField("amenityId", isEqualTo: amenityId) }
         if let unitId { query = query.whereField("unitId", isEqualTo: unitId) }
         query = query.order(by: "createdAt", descending: true)
@@ -432,8 +578,13 @@ final class FirestoreService {
         return subject.handleEvents(receiveCancel: { listener.remove() }).eraseToAnyPublisher()
     }
 
-    func fetchReservations(forAmenity amenityId: String) async throws -> [Reservation] {
+    func fetchReservations(forAmenity amenityId: String, buildingId: String?) async throws -> [Reservation] {
+        guard let bid = hasTenant(buildingId) else {
+            print("Tenant guard: fetchReservations missing buildingId")
+            return []
+        }
         let snapshot = try await db.collection("reservations")
+            .whereField("buildingId", isEqualTo: bid)
             .whereField("amenityId", isEqualTo: amenityId)
             .order(by: "createdAt", descending: true)
             .getDocuments()
@@ -454,12 +605,22 @@ final class FirestoreService {
 
     // MARK: - Notifications
 
-    func listenNotifications(audience: String? = nil) -> AnyPublisher<[AppNotification], Error> {
-        if let audience {
-            return listenCollection(collection: "notifications", whereField: "audience", isEqualTo: audience, orderBy: "createdAt", descending: true)
-        } else {
-            return listenCollection(collection: "notifications", orderBy: "createdAt", descending: true)
+    func listenNotifications(audience: String? = nil, buildingId: String?) -> AnyPublisher<[AppNotification], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenNotifications missing buildingId")
         }
+        let subject = PassthroughSubject<[AppNotification], Error>()
+        var query: Query = db.collection("notifications").whereField("buildingId", isEqualTo: bid)
+        if let audience {
+            query = query.whereField("audience", isEqualTo: audience)
+        }
+        query = query.order(by: "createdAt", descending: true)
+        let listener = query.addSnapshotListener { snapshot, error in
+            if let error { subject.send(completion: .failure(error)); return }
+            let items = snapshot?.documents.compactMap { AppNotification(id: $0.documentID, data: $0.data()) } ?? []
+            subject.send(items)
+        }
+        return subject.handleEvents(receiveCancel: { listener.remove() }).eraseToAnyPublisher()
     }
 
     func createNotification(_ notification: AppNotification) async throws -> String {
@@ -472,13 +633,11 @@ final class FirestoreService {
     
     // MARK: - Marketplace (Services & Perks)
     
-    func listenMarketplace(buildingId: String? = nil) -> AnyPublisher<[MarketplaceItem], Error> {
-        // En un caso real, podríamos querer servicios globales (buildingId == nil) Y locales. 
-        // Por simplicidad, traemos todos y filtramos en UI o query compuesta.
-        // Aquí traemos todo lo global O matching buildingId requeriría 'OR' queries (dificil en Firestore básico).
-        // Estrategia: traer colección completa ordenado por creado (asumiendo catálogo pequeño) O filtrar solo buildingId si se provee.
-        // Vamos a asumir que "Marketplace" es global para la ciudad/país en MVP, o filtrado simple.
-        return listenCollection(collection: "marketplace", orderBy: "createdAt", descending: true)
+    func listenMarketplace(buildingId: String?) -> AnyPublisher<[MarketplaceItem], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenMarketplace missing buildingId")
+        }
+        return listenCollection(collection: "marketplace", whereField: "buildingId", isEqualTo: bid, orderBy: "createdAt", descending: true)
     }
     
     func createMarketplaceItem(_ item: MarketplaceItem) async throws -> String {
@@ -508,8 +667,11 @@ final class FirestoreService {
     
     // MARK: - Polls (Condo Owner)
     
-    func listenPolls(buildingId: String) -> AnyPublisher<[Poll], Error> {
-        listenCollection(collection: "polls", whereField: "buildingId", isEqualTo: buildingId, orderBy: "createdAt", descending: true)
+    func listenPolls(buildingId: String?) -> AnyPublisher<[Poll], Error> {
+        guard let bid = hasTenant(buildingId) else {
+            return emptyTenantPublisher(reason: "listenPolls missing buildingId")
+        }
+        return listenCollection(collection: "polls", whereField: "buildingId", isEqualTo: bid, orderBy: "createdAt", descending: true)
     }
     
     func createPoll(_ poll: Poll) async throws -> String {

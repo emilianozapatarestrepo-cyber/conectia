@@ -1,0 +1,52 @@
+{
+  "name": "@conectia/backend",
+  "version": "0.1.0",
+  "description": "Conectia Fintech Backend — Immutable Double-Entry Ledger & Payment Auto-Reconciliation",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "migrate": "psql $DATABASE_URL -f migrations/001_init_financial_ledger.sql",
+    "migrate:check": "psql $DATABASE_URL -c \"SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;\"",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "firebase-admin": "^13.0.2",
+    "helmet": "^8.0.0",
+    "http-status-codes": "^2.3.0",
+    "kysely": "^0.27.4",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0",
+    "uuid": "^11.0.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.1",
+    "@types/pg": "^8.11.10",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "embedded-postgres": "^18.1.0-beta.16",
+    "eslint": "^9.16.0",
+    "fast-check": "^4.5.3",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
+  }
+}

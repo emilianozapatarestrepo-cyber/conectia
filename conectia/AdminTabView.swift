@@ -45,6 +45,7 @@ struct AdminTabView: View {
 
 struct AdminTicketsView: View {
     @StateObject private var vm = TicketsViewModel()
+    @EnvironmentObject private var session: SessionManager
     var body: some View {
         List {
             ForEach(vm.tickets) { t in
@@ -59,8 +60,9 @@ struct AdminTicketsView: View {
             // Uso de ID estandarizado (si SessionManager estuviera disponible aqui, mejor, 
             // pero AuthService.shared es el backend directo. Asumimos que AuthService tiene currentUserUID o similar.
             // Si AuthService no tiene currentUserUID publico, usamos Auth.auth().currentUser?.uid
-            let uid = SessionManager().currentUserId ?? "" 
-            vm.startListening(userId: uid, isAdmin: true)
+            let uid = SessionManager().currentUserId ?? ""
+            let buildingId = session.currentUser?.buildingId
+            vm.startListening(userId: uid, isAdmin: true, buildingId: buildingId)
         }
     }
 }
@@ -165,6 +167,7 @@ struct AdminAmenitiesView: View {
     @State private var newAmenityName = ""
     @State private var selectedBuildingId = ""
     @State private var cancellables = Set<AnyCancellable>()
+    @EnvironmentObject private var session: SessionManager
 
     var body: some View {
         List {
@@ -213,7 +216,7 @@ struct AdminAmenitiesView: View {
     }
     
     private func loadData() {
-        FirestoreService.shared.listenAmenities()
+        FirestoreService.shared.listenAmenities(buildingId: session.currentUser?.buildingId)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { self.items = $0 })
             .store(in: &cancellables)
@@ -258,6 +261,7 @@ struct AdminReservationsView: View {
     @State private var amenitiesDict: [String: String] = [:] // id -> name
     @State private var unitsDict: [String: String] = [:] // id -> number
     @State private var cancellables = Set<AnyCancellable>()
+    @EnvironmentObject private var session: SessionManager
 
     var body: some View {
         List {
@@ -316,14 +320,14 @@ struct AdminReservationsView: View {
     }
     
     private func refresh() {
-        FirestoreService.shared.listenReservations()
+        FirestoreService.shared.listenReservations(buildingId: session.currentUser?.buildingId)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { self.items = $0 })
             .store(in: &cancellables)
             
         // Load dictionaries safely using Combine listeners (since fetchAll is not available in FirestoreService)
         // 1. Amenities
-        FirestoreService.shared.listenAmenities(buildingId: nil)
+        FirestoreService.shared.listenAmenities(buildingId: session.currentUser?.buildingId)
             .first()
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { list in
@@ -332,7 +336,7 @@ struct AdminReservationsView: View {
             .store(in: &cancellables)
             
         // 2. Units
-        FirestoreService.shared.listenUnits(buildingId: nil)
+        FirestoreService.shared.listenUnits(buildingId: session.currentUser?.buildingId)
             .first()
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { list in
@@ -372,6 +376,7 @@ struct AdminAnnouncementsView: View {
     @State private var titleText = ""
     @State private var messageText = ""
     @State private var cancellables = Set<AnyCancellable>()
+    @EnvironmentObject private var session: SessionManager
 
     var body: some View {
         VStack {
@@ -395,7 +400,7 @@ struct AdminAnnouncementsView: View {
         }
         .navigationTitle("Avisos")
         .onAppear {
-            FirestoreService.shared.listenNotifications(audience: "residents")
+            FirestoreService.shared.listenNotifications(audience: "residents", buildingId: session.currentUser?.buildingId)
                 .receive(on: RunLoop.main)
                 .sink(receiveCompletion: { _ in }, receiveValue: { self.items = $0 })
                 .store(in: &cancellables)

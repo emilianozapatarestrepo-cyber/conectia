@@ -42,7 +42,8 @@ struct ServicesTabView: View {
     }
     
     private func loadMarketplace() {
-        FirestoreService.shared.listenMarketplace()
+        let buildingId = session.currentUser?.buildingId
+        FirestoreService.shared.listenMarketplace(buildingId: buildingId)
             .receive(on: RunLoop.main)
             .sink(receiveCompletion: { _ in }, receiveValue: { self.items = $0 })
             .store(in: &cancellables)

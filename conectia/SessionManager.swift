@@ -62,37 +62,86 @@ final class SessionManager: ObservableObject {
         authListenerHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             guard let self else { return }
             Task { @MainActor in
+                #if DEBUG
+                print("🧭 [SessionManager] Auth state changed: user=\(user?.uid ?? "nil")")
+                #endif
                 self.isAuthenticated = (user != nil)
                 if let user = user {
-                    // Primero intentamos cargar el usuario unificado desde "users" por email.
+                    #if DEBUG
+                    print("🧭 [SessionManager] Attempting to load user document from users/\(user.uid)...")
+                    #endif
                     do {
-                        if let email = user.email,
-                           let appUser = try await FirestoreService.shared.fetchUser(byEmail: email) {
+                        // PRIORIDAD 1: Buscar por UID (fuente de verdad)
+                        if let appUser = try await FirestoreService.shared.getUser(id: user.uid) {
+                            #if DEBUG
+                            print("🧭 [SessionManager] ✅ User document found:")
+                            print("   uid: \(user.uid)")
+                            print("   role: \(appUser.role.rawValue)")
+                            print("   buildingId: \(appUser.buildingId ?? "nil")")
+                            print("   unitId: \(appUser.unitId ?? "nil")")
+                            print("   accessStatus: \(appUser.accessStatus.rawValue)")
+                            #endif
+                            
                             self.currentUser = appUser
-                            self.setRole(appUser.role) // Mantiene compatibilidad con vistas que usan isAdmin/userRole.
+                            self.setRole(appUser.role)
                             if let bid = appUser.buildingId {
                                 self.currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
+                                #if DEBUG
+                                print("🧭 [SessionManager]    building: \(self.currentBuilding?.name ?? "error")")
+                                #endif
+                            } else {
+                                self.currentBuilding = nil
+                                #if DEBUG
+                                print("🧭 [SessionManager]    ⚠️ no buildingId - onboarding state")
+                                #endif
                             }
-                        } else {
-                            // Fallback: lógica legacy de 'admins'/'residents' por UID, pero sin promocionar a currentUser (solo roles).
+                        }
+                        // FALLBACK: Migración automática desde email
+                        else if let email = user.email,
+                                let appUserByEmail = try await FirestoreService.shared.fetchUser(byEmail: email.lowercased()) {
+                            #if DEBUG
+                            print("🧭 [SessionManager] ⚠️ User not found by UID, migrating from email: \(email)")
+                            #endif
+                            try await FirestoreService.shared.createUser(id: user.uid, user: appUserByEmail)
+                            self.currentUser = appUserByEmail
+                            self.setRole(appUserByEmail.role)
+                            if let bid = appUserByEmail.buildingId {
+                                self.currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
+                            }
+                        }
+                        // LEGACY FINAL: Intentar cargar desde admins/residents
+                        else {
+                            #if DEBUG
+                            print("🧭 [SessionManager] ❌ User document NOT FOUND in users/\(user.uid)")
+                            print("    Trying legacy collections...")
+                            #endif
                             await self.loadRoleAndObserveProfile(uid: user.uid)
                             self.currentUser = nil
                             self.currentBuilding = nil
                         }
                     } catch {
-                        // En caso de error, al menos aplicamos el fallback legacy.
+                        #if DEBUG
+                        print("🧭 [SessionManager] ❌ Error loading user: \(error.localizedDescription)")
+                        #endif
                         await self.loadRoleAndObserveProfile(uid: user.uid)
                         self.currentUser = nil
                         self.currentBuilding = nil
                     }
                 } else {
+                    #if DEBUG
+                    print("🧭 [SessionManager] User signed out")
+                    #endif
                     self.userRole = nil
                     self.isAdmin = false
                     self.resident = nil
                     self.admin = nil
                     self.currentUser = nil
+                    self.currentBuilding = nil
                     self.cancelProfileListeners()
                 }
+                #if DEBUG
+                print("🧭 [SessionManager] isCheckingAuth = false, currentUser = \(self.currentUser?.uid ?? "nil")")
+                #endif
                 self.isCheckingAuth = false
             }
         }
@@ -161,46 +210,59 @@ final class SessionManager: ObservableObject {
     }
 
     /// Refresca el estado de sesión leyendo de Firebase/AuthService y recuperando el perfil en Firestore.
-    func refreshSession() {
-        Task { @MainActor in
-            isCheckingAuth = true
-            let authUser = Auth.auth().currentUser
-            isAuthenticated = (authUser != nil)
+    func refreshSession() async {
+        isCheckingAuth = true
+        let authUser = Auth.auth().currentUser
+        isAuthenticated = (authUser != nil)
 
-            guard let user = authUser else {
-                userRole = nil
-                isAdmin = false
-                resident = nil
-                admin = nil
-                currentUser = nil
-                currentBuilding = nil
-                cancelProfileListeners()
-                isCheckingAuth = false
-                return
-            }
+        guard let user = authUser else {
+            userRole = nil
+            isAdmin = false
+            resident = nil
+            admin = nil
+            currentUser = nil
+            currentBuilding = nil
+            cancelProfileListeners()
+            isCheckingAuth = false
+            return
+        }
 
-            do {
-                if let email = user.email,
-                   let appUser = try await FirestoreService.shared.fetchUser(byEmail: email) {
-                    currentUser = appUser
-                    setRole(appUser.role)
-                    if let bid = appUser.buildingId {
-                        currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
-                    } else {
-                        currentBuilding = nil
-                    }
+        do {
+            // PRIORIDAD 1: users/{uid}
+            if let appUser = try await FirestoreService.shared.getUser(id: user.uid) {
+                currentUser = appUser
+                setRole(appUser.role)
+                if let bid = appUser.buildingId {
+                    currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
                 } else {
-                    await loadRoleAndObserveProfile(uid: user.uid)
-                    currentUser = nil
                     currentBuilding = nil
                 }
-            } catch {
+            }
+            // FALLBACK: Migración
+            else if let email = user.email,
+                    let appUserByEmail = try await FirestoreService.shared.fetchUser(byEmail: email.lowercased()) {
+                print("📦 Migrating user in refreshSession: \(user.uid)")
+                try await FirestoreService.shared.createUser(id: user.uid, user: appUserByEmail)
+                currentUser = appUserByEmail
+                setRole(appUserByEmail.role)
+                if let bid = appUserByEmail.buildingId {
+                    currentBuilding = try? await FirestoreService.shared.getBuilding(id: bid)
+                }
+            }
+            // LEGACY
+            else {
+                print("⚠️ refreshSession: User doc not found, trying legacy")
                 await loadRoleAndObserveProfile(uid: user.uid)
                 currentUser = nil
                 currentBuilding = nil
             }
-            isCheckingAuth = false
+        } catch {
+            print("❌ refreshSession error: \(error.localizedDescription)")
+            await loadRoleAndObserveProfile(uid: user.uid)
+            currentUser = nil
+            currentBuilding = nil
         }
+        isCheckingAuth = false
     }
 
     // MARK: - Auth actions
@@ -208,16 +270,50 @@ final class SessionManager: ObservableObject {
     func login(email: String, password: String) async -> Result<Void, Error> {
         let result = await authService.loginUser(email: email, password: password)
         if case .success = result {
-            refreshSession()
+            await refreshSession()
         }
         return result
     }
 
-    func register(email: String, password: String) async -> Result<Void, Error> {
+    func register(
+        email: String, 
+        password: String, 
+        fullName: String = "Usuario", 
+        role: UserRole = .resident
+    ) async -> Result<Void, Error> {
         let result = await authService.registerUser(email: email, password: password)
+        
         if case .success = result {
-            refreshSession()
+            // Crear documento en users/{uid} INMEDIATAMENTE
+            if let uid = authService.currentUserUID {
+                let newUser = AppUser(
+                    id: uid,
+                    uid: uid,
+                    fullName: fullName,
+                    email: email,
+                    emailLowercased: email.lowercased().trimmingCharacters(in: .whitespaces),
+                    role: role,
+                    buildingId: nil,
+                    unitId: nil,
+                    photoURL: nil,
+                    isActive: false,
+                    accessStatus: .onboarding,
+                    createdAt: Date(),
+                    updatedAt: Date()
+                )
+                
+                do {
+                    try await FirestoreService.shared.createUser(id: uid, user: newUser)
+                    print("✅ User document created: users/\(uid)")
+                } catch {
+                    print("❌ Failed to create user doc: \(error.localizedDescription)")
+                    // NO falla el registro, el auth listener lo intentará
+                }
+            }
+            
+            await refreshSession()
         }
+        
         return result
     }
 
@@ -239,40 +335,4 @@ final class SessionManager: ObservableObject {
         }
         return result
     }
-    
-    // MARK: - Demo Mode
-    
-#if DEBUG
-    func loginAsDemoUser() {
-        // Bypass auth for demo
-        isAuthenticated = true
-        isCheckingAuth = false
-        
-        let demoId = "demo_user_maria"
-        let buildingId = "demo_building_01"
-        
-        // Create Mock AppUser
-        // Usamos init(id:data:) ya que el memberwise puede no estar disponible o ser confuso
-        let data: [String: Any] = [
-            "name": "Maria González",
-            "email": "maria@demo.com",
-            "role": UserRole.owner.rawValue,
-            "buildingId": buildingId,
-            "unitId": "unit_402", // Explicit unit for voting
-            "isActive": true,
-            "photoURL": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80"
-        ]
-        
-        if let mockUser = AppUser(id: demoId, data: data) {
-            self.currentUser = mockUser
-            self.setRole(.owner)
-            // Mock Building
-            let buildingData: [String: Any] = [
-                "name": "Torres del Parque",
-                "type": BuildingType.condo.rawValue
-            ]
-            self.currentBuilding = Building(id: buildingId, data: buildingData)
-        }
-    }
-#endif
 }
