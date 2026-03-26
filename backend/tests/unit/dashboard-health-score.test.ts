@@ -35,10 +35,10 @@ describe('calculateHealthScore', () => {
     expect(result.color).toBe('red');
   });
 
-  it('deducts 10 points per pending reconciliation >48h', () => {
+  it('reduces score by 4 points for 2 pending reconciliations >48h (20pt penalty × 0.20 weight)', () => {
     const withoutPending = calculateHealthScore(base);
     const withPending = calculateHealthScore({ ...base, pendingReconciliationCount: 2, pendingReconciliationHours: 72 });
-    expect(withPending.score).toBe(withoutPending.score - 20);
+    expect(withPending.score).toBe(withoutPending.score - 4);
   });
 
   it('does not go below 0', () => {
