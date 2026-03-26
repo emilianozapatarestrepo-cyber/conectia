@@ -1,6 +1,6 @@
 /**
  * Kysely type definitions for the Conectia financial database.
- * These types mirror the PostgreSQL schema defined in migrations 001 + 002.
+ * These types mirror the PostgreSQL schema defined in migrations 001–004.
  * All column names use camelCase (CamelCasePlugin handles the conversion).
  */
 import type { ColumnType, Generated, Insertable, Selectable, Updateable } from 'kysely';
@@ -312,3 +312,11 @@ export type TenantLedgerState = Selectable<TenantLedgerStateTable>;
 export type TenantMembership = Selectable<TenantMembershipsTable>;
 export type NewTenantMembership = Insertable<TenantMembershipsTable>;
 export type TenantMembershipUpdate = Updateable<TenantMembershipsTable>;
+
+export type Period = Selectable<PeriodsTable>;
+export type NewPeriod = Insertable<PeriodsTable>;
+export type PeriodUpdate = Updateable<PeriodsTable>;
+
+export type Alert = Selectable<AlertsTable>;
+export type NewAlert = Insertable<AlertsTable>;
+export type AlertUpdate = Updateable<AlertsTable>;

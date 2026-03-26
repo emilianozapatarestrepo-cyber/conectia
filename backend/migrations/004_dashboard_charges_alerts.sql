@@ -1,13 +1,13 @@
--- migrations/003_dashboard_charges_alerts.sql
+-- migrations/004_dashboard_charges_alerts.sql
 -- Conectia Dashboard Schema — additive migration
--- Run: psql $DATABASE_URL -f migrations/003_dashboard_charges_alerts.sql
+-- Run: psql $DATABASE_URL -f migrations/004_dashboard_charges_alerts.sql
 
 BEGIN;
 
 -- ── Billing periods (NEW TABLE) ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS periods (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL,
+  tenant_id   UUID NOT NULL REFERENCES tenants(id),
   label       TEXT NOT NULL,
   year        INTEGER NOT NULL,
   month       INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
@@ -22,7 +22,8 @@ ALTER TABLE periods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE periods FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS periods_tenant_isolation ON periods;
 CREATE POLICY periods_tenant_isolation ON periods
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
 
 CREATE INDEX IF NOT EXISTS idx_periods_tenant ON periods(tenant_id, year, month);
 
@@ -49,11 +50,12 @@ ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS alerts_tenant_isolation ON alerts;
 CREATE POLICY alerts_tenant_isolation ON alerts
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
 
 CREATE INDEX IF NOT EXISTS idx_alerts_active ON alerts(tenant_id, resolved, severity);
 
--- ── Extend charges table (ADD COLUMNS only) ───────────────────────────────────
+-- ── Extend charges (ADD COLUMNS) ──────────────────────────────────────────────
 ALTER TABLE charges ADD COLUMN IF NOT EXISTS unit_label TEXT;
 ALTER TABLE charges ADD COLUMN IF NOT EXISTS owner_name TEXT;
 ALTER TABLE charges ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
@@ -63,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_charges_tenant_period ON charges(tenant_id, perio
 CREATE INDEX IF NOT EXISTS idx_charges_tenant_unit   ON charges(tenant_id, unit_id);
 CREATE INDEX IF NOT EXISTS idx_charges_status_due    ON charges(tenant_id, status, due_date);
 
--- ── Extend payment_intents table (ADD COLUMNS only) ───────────────────────────
+-- ── Extend payment_intents (ADD COLUMNS) ─────────────────────────────────────
 ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS charge_id UUID REFERENCES charges(id);
 ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS external_ref TEXT;
 ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS receipt_url TEXT;
@@ -72,6 +74,5 @@ ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS webhook_payload JSONB;
 ALTER TABLE payment_intents ADD COLUMN IF NOT EXISTS webhook_received_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_pi_charge ON payment_intents(tenant_id, charge_id);
-CREATE INDEX IF NOT EXISTS idx_pi_status ON payment_intents(tenant_id, status);
 
 COMMIT;
