@@ -8,6 +8,7 @@ import { logger } from './shared/logger.js';
 import { correlationMiddleware } from './shared/middlewares/correlation.js';
 import { globalErrorHandler } from './shared/middlewares/error-handler.js';
 import { createLedgerRouter } from './modules/ledger/presentation/ledger.routes.js';
+import { createDashboardRouter } from './modules/dashboard/presentation/dashboard.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -28,6 +29,7 @@ async function bootstrap(): Promise<void> {
 
   // ── API Routes ──
   app.use('/api/v1/ledger', createLedgerRouter());
+  app.use('/api/v1/dashboard', createDashboardRouter());
 
   // ── Global Error Handler (must be last) ──
   app.use(globalErrorHandler);
