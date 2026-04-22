@@ -1,6 +1,6 @@
 /**
  * Kysely type definitions for the Conectia financial database.
- * These types mirror the PostgreSQL schema defined in migrations 001 + 002.
+ * These types mirror the PostgreSQL schema defined in migrations 001–004.
  * All column names use camelCase (CamelCasePlugin handles the conversion).
  */
 import type { ColumnType, Generated, Insertable, Selectable, Updateable } from 'kysely';
@@ -125,6 +125,10 @@ export interface ChargesTable {
   createdBy: string;
   createdAt: Generated<Date>;
   updatedAt: Generated<Date>;
+  unitLabel: string | null;
+  ownerName: string | null;
+  paidAt: Date | null;
+  transactionId: string | null;
 }
 
 export interface PaymentIntentsTable {
@@ -143,6 +147,12 @@ export interface PaymentIntentsTable {
   metadata: ColumnType<Record<string, unknown>, string | undefined, string | undefined>;
   createdAt: Generated<Date>;
   updatedAt: Generated<Date>;
+  chargeId: string | null;
+  externalRef: string | null;
+  receiptUrl: string | null;
+  comprobanteUrl: string | null;
+  webhookPayload: ColumnType<Record<string, unknown> | null, Record<string, unknown> | string | null, Record<string, unknown> | string | null>;
+  webhookReceivedAt: Date | null;
 }
 
 export interface WebhookEventsTable {
@@ -211,6 +221,38 @@ export interface TenantMembershipsTable {
   updatedAt: Generated<Date>;
 }
 
+export interface PeriodsTable {
+  id: Generated<string>;
+  tenantId: string;
+  label: string;
+  year: number;
+  month: number;
+  startsAt: ColumnType<Date, Date | string, Date | string>;
+  endsAt: ColumnType<Date, Date | string, Date | string>;
+  dueDate: ColumnType<Date, Date | string, Date | string>;
+  createdAt: Generated<Date>;
+}
+
+export type AlertType = 'mora_critica' | 'mora_nueva' | 'conciliacion_pendiente' | 'vencimiento_proximo' | 'pago_confirmado';
+export type AlertSeverity = 'critical' | 'warning' | 'info';
+
+export interface AlertsTable {
+  id: Generated<string>;
+  tenantId: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  unitId: string | null;
+  unitLabel: string | null;
+  amount: ColumnType<bigint | string, bigint | number | string, bigint | number | string> | null;
+  message: string;
+  actionType: string | null;
+  actionLabel: string | null;
+  resolved: Generated<boolean>;
+  resolvedAt: Date | null;
+  createdAt: Generated<Date>;
+  expiresAt: Date | null;
+}
+
 // ─── Database Interface (Kysely root) ────────────────────────────────────────
 
 export interface DB {
@@ -226,6 +268,8 @@ export interface DB {
   auditLog: AuditLogTable;
   tenantLedgerState: TenantLedgerStateTable;
   tenantMemberships: TenantMembershipsTable;
+  periods: PeriodsTable;
+  alerts: AlertsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -268,3 +312,11 @@ export type TenantLedgerState = Selectable<TenantLedgerStateTable>;
 export type TenantMembership = Selectable<TenantMembershipsTable>;
 export type NewTenantMembership = Insertable<TenantMembershipsTable>;
 export type TenantMembershipUpdate = Updateable<TenantMembershipsTable>;
+
+export type Period = Selectable<PeriodsTable>;
+export type NewPeriod = Insertable<PeriodsTable>;
+export type PeriodUpdate = Updateable<PeriodsTable>;
+
+export type Alert = Selectable<AlertsTable>;
+export type NewAlert = Insertable<AlertsTable>;
+export type AlertUpdate = Updateable<AlertsTable>;
