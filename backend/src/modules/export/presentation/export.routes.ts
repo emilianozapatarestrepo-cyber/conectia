@@ -13,17 +13,23 @@ export function createExportRouter(): Router {
   router.get('/statement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
     try {
       const { unitId, period } = z.object({
-        unitId: z.string().min(1),
-        period: z.string().regex(/^\d{4}-\d{2}$/),
+        unitId: z.string().regex(/^[A-Za-z0-9_\-]{1,64}$/, 'unitId must be alphanumeric'),
+        period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       }).parse(req.query);
 
       const charges = await chargesRepo.list(req.user!.tenantId!, { unitId, period });
+
+      if (charges.length === 0) {
+        res.status(404).json({ error: 'No charges found for this unit in the requested period' });
+        return;
+      }
+
       const totalOwed = charges
         .filter((c) => c.status !== 'paid')
         .reduce((s, c) => s + c.amount, 0n);
 
       const buildingName = 'Conjunto Residencial'; // TODO: fetch from tenant profile
-      const pdfBuffer = generateStatementPDF({
+      const pdfBuffer = await generateStatementPDF({
         buildingName,
         period,
         unitLabel: charges[0]?.unitLabel ?? unitId,
@@ -38,9 +44,10 @@ export function createExportRouter(): Router {
         generatedAt: new Date().toLocaleDateString('es-CO'),
       });
 
+      const safeUnitId = encodeURIComponent(unitId);
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="estado-cuenta-${unitId}-${period}.pdf"`,
+        'Content-Disposition': `attachment; filename="estado-cuenta-${safeUnitId}-${period}.pdf"`,
         'Content-Length': String(pdfBuffer.length),
       });
       res.send(pdfBuffer);
@@ -51,7 +58,7 @@ export function createExportRouter(): Router {
   router.get('/portfolio', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
     try {
       const { period } = z.object({
-        period: z.string().regex(/^\d{4}-\d{2}$/),
+        period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       }).parse(req.query);
 
       const delinquent = await chargesRepo.getDelinquent(req.user!.tenantId!);
