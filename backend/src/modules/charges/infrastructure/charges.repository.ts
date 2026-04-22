@@ -107,25 +107,57 @@ export class ChargesRepository implements IChargesRepository {
     });
   }
 
-  async approve(tenantId: string, paymentIntentId: string, _actorId: string): Promise<void> {
+  async approve(tenantId: string, paymentIntentId: string, actorId: string): Promise<void> {
     await withTenantTransaction(tenantId, async (trx) => {
-      await trx
+      const result = await trx
         .updateTable('paymentIntents')
         .set({ status: 'confirmed', updatedAt: new Date() })
         .where('tenantId', '=', tenantId)
         .where('id', '=', paymentIntentId)
-        .execute();
+        .where('status', '=', 'pending')   // C2 guard
+        .executeTakeFirst();
+
+      if (Number(result.numUpdatedRows) !== 1) {
+        throw new Error('CONCURRENT_UPDATE: payment intent was already processed');
+      }
+
+      await trx.insertInto('auditLog').values({
+        tenantId,
+        actorId,
+        action: 'payment_intent.approve',
+        targetTable: 'payment_intents',
+        targetId: paymentIntentId,
+        beforeData: JSON.stringify({ status: 'pending' }),
+        afterData: JSON.stringify({ status: 'confirmed' }),
+        createdAt: new Date(),
+      }).execute();
     });
   }
 
-  async reject(tenantId: string, paymentIntentId: string, _actorId: string, _reason: string): Promise<void> {
+  async reject(tenantId: string, paymentIntentId: string, actorId: string, reason: string): Promise<void> {
     await withTenantTransaction(tenantId, async (trx) => {
-      await trx
+      const result = await trx
         .updateTable('paymentIntents')
         .set({ status: 'failed', updatedAt: new Date() })
         .where('tenantId', '=', tenantId)
         .where('id', '=', paymentIntentId)
-        .execute();
+        .where('status', '=', 'pending')   // C2 guard
+        .executeTakeFirst();
+
+      if (Number(result.numUpdatedRows) !== 1) {
+        throw new Error('CONCURRENT_UPDATE: payment intent was already processed');
+      }
+
+      await trx.insertInto('auditLog').values({
+        tenantId,
+        actorId,
+        action: 'payment_intent.reject',
+        targetTable: 'payment_intents',
+        targetId: paymentIntentId,
+        beforeData: JSON.stringify({ status: 'pending' }),
+        afterData: JSON.stringify({ status: 'failed', reason }),
+        createdAt: new Date(),
+      }).execute();
     });
   }
 }
