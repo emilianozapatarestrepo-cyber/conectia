@@ -5,7 +5,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatCOP, formatDate } from '@/lib/formatters';
 import type { Charge } from '@/lib/schemas';
 
-type FilterStatus = 'all' | 'paid' | 'active' | 'overdue';
+type FilterStatus = 'all' | 'paid' | 'pending' | 'overdue';
 
 const COLUMNS: Column<Charge>[] = [
   { key: 'unit',    header: 'Unidad',       render: (r) => <span className="font-medium">{r.unitLabel}</span> },
@@ -25,7 +25,7 @@ export default function RecaudoPage() {
   const FILTER_OPTIONS: { value: FilterStatus; label: string }[] = [
     { value: 'all',     label: 'Todos' },
     { value: 'paid',    label: 'Pagados' },
-    { value: 'active',  label: 'Pendientes' },
+    { value: 'pending', label: 'Pendientes' },
     { value: 'overdue', label: 'En mora' },
   ];
 

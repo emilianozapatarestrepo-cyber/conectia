@@ -24,5 +24,12 @@ export function createDashboardRouter(): Router {
   router.get('/trend',   requireAuth, requireTenant, requireAdmin, controller.trend);
   router.get('/alerts',  requireAuth, requireTenant, requireAdmin, controller.alerts);
 
+  router.get('/delinquent', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+    try {
+      const units = await repo.getDelinquent(req.user!.tenantId!);
+      res.json(units.map((u) => ({ ...u, totalOwed: u.totalOwed.toString() })));
+    } catch (err) { next(err); }
+  });
+
   return router;
 }
