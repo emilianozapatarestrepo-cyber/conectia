@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_periods_tenant ON periods(tenant_id, year, month)
 -- ── Alerts (NEW TABLE) ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS alerts (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id     UUID NOT NULL,
+  tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   type          TEXT NOT NULL
                   CHECK (type IN ('mora_critica','mora_nueva','conciliacion_pendiente','vencimiento_proximo','pago_confirmado')),
   severity      TEXT NOT NULL CHECK (severity IN ('critical','warning','info')),

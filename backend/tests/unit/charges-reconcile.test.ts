@@ -32,12 +32,12 @@ describe('ReconcileUseCase', () => {
   it('throws if payment intent not found', async () => {
     mockRepo.getPaymentIntent.mockResolvedValue(null);
     const uc = new ReconcileUseCase(mockRepo as any);
-    await expect(uc.execute('tenant-1', 'pi-1', 'approve', 'admin-1')).rejects.toThrow('Cannot reconcile');
+    await expect(uc.execute('tenant-1', 'pi-1', 'approve', 'admin-1')).rejects.toThrow('PI_NOT_FOUND');
   });
 
   it('throws if payment intent not in pending status', async () => {
-    mockRepo.getPaymentIntent.mockResolvedValue({ id: 'pi-1', status: 'approved' });
+    mockRepo.getPaymentIntent.mockResolvedValue({ id: 'pi-1', status: 'confirmed' });
     const uc = new ReconcileUseCase(mockRepo as any);
-    await expect(uc.execute('tenant-1', 'pi-1', 'approve', 'admin-1')).rejects.toThrow('Cannot reconcile');
+    await expect(uc.execute('tenant-1', 'pi-1', 'approve', 'admin-1')).rejects.toThrow('PI_INVALID_STATE');
   });
 });

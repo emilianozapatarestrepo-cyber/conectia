@@ -21,7 +21,7 @@ export class DashboardRepository implements IDashboardRepository {
         .where('year', '=', year)
         .where('month', '=', month);
 
-      const pendingStatuses: ChargeStatus[] = ['pending' as ChargeStatus, 'overdue'];
+      const pendingStatuses: ChargeStatus[] = ['draft', 'active', 'partial', 'overdue'];
 
       // Aggregate charges for the period
       const row = await trx
