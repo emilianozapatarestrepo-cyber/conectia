@@ -19,6 +19,7 @@ const envSchema = z.object({
   // Webhooks — Wompi
   WOMPI_EVENTS_SECRET: z.string().min(1).optional(),
   WOMPI_INTEGRITY_SECRET: z.string().min(1).optional(),
+  WOMPI_PUBLIC_KEY: z.string().min(1).optional(),
 
   // App
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

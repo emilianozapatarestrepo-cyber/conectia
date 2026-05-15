@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import { db, withTenantTransaction } from '../../../shared/database/db.js';
+import { createHash } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface MatchedIntent {
@@ -14,7 +15,6 @@ export interface MatchedIntent {
 export class WebhookRepository {
 
   // ── Store webhook event (idempotent) ───────────────────────────────────────
-  // Returns { id, isDuplicate }
   async storeEvent(opts: {
     provider: string;
     eventType: string;
@@ -24,19 +24,16 @@ export class WebhookRepository {
     signature: string | null;
     signatureValid: boolean;
   }): Promise<{ id: string; isDuplicate: boolean }> {
-    const { providerEventId, idempotencyKey, ...rest } = opts;
-
-    // ON CONFLICT DO NOTHING — idempotency via UNIQUE (provider, idempotency_key)
     const result = await db
       .insertInto('webhookEvents')
       .values({
-        provider: rest.provider,
-        eventType: rest.eventType,
-        providerEventId,
-        idempotencyKey,
-        rawPayload: JSON.stringify(rest.rawPayload) as unknown as Record<string, unknown>,
-        signature: rest.signature,
-        signatureValid: rest.signatureValid,
+        provider: opts.provider,
+        eventType: opts.eventType,
+        providerEventId: opts.providerEventId,
+        idempotencyKey: opts.idempotencyKey,
+        rawPayload: JSON.stringify(opts.rawPayload) as unknown as Record<string, unknown>,
+        signature: opts.signature,
+        signatureValid: opts.signatureValid,
         processingStatus: 'pending',
       })
       .onConflict((oc) => oc.columns(['provider', 'idempotencyKey']).doNothing())
@@ -44,12 +41,11 @@ export class WebhookRepository {
       .executeTakeFirst();
 
     if (!result) {
-      // Duplicate — fetch the existing event id
       const existing = await db
         .selectFrom('webhookEvents')
         .select('id')
         .where('provider', '=', opts.provider)
-        .where('idempotencyKey', '=', idempotencyKey)
+        .where('idempotencyKey', '=', opts.idempotencyKey)
         .executeTakeFirstOrThrow();
       return { id: existing.id, isDuplicate: true };
     }
@@ -67,14 +63,7 @@ export class WebhookRepository {
       .executeTakeFirst();
 
     if (!row) return null;
-    return {
-      intentId: row.id,
-      tenantId: row.tenantId,
-      chargeId: row.chargeId ?? null,
-      amount: typeof row.amount === 'bigint' ? row.amount : BigInt(String(row.amount)),
-      unitId: row.unitId,
-      userId: row.userId,
-    };
+    return this.mapIntent(row);
   }
 
   // ── Fuzzy match: same amount + pending + within 24h ────────────────────────
@@ -85,19 +74,12 @@ export class WebhookRepository {
       .where('amount', '=', amount)
       .where('status', '=', 'pending')
       .where('createdAt', '>', sql<Date>`now() - interval '24 hours'`)
-      .orderBy('createdAt', 'asc')   // oldest first (FIFO)
+      .orderBy('createdAt', 'asc')
       .limit(1)
       .executeTakeFirst();
 
     if (!row) return null;
-    return {
-      intentId: row.id,
-      tenantId: row.tenantId,
-      chargeId: row.chargeId ?? null,
-      amount: typeof row.amount === 'bigint' ? row.amount : BigInt(String(row.amount)),
-      unitId: row.unitId,
-      userId: row.userId,
-    };
+    return this.mapIntent(row);
   }
 
   // ── Confirm payment: update intent + charge + post ledger entry ────────────
@@ -111,8 +93,8 @@ export class WebhookRepository {
     const { intent, wompiTxId, receiptUrl, rawPayload, webhookEventId } = opts;
 
     await withTenantTransaction(intent.tenantId, async (trx) => {
-      // 1. Confirm the payment intent
-      await trx
+      // 1. Confirm the payment intent (idempotency guard: WHERE status = 'pending')
+      const piResult = await trx
         .updateTable('paymentIntents')
         .set({
           status: 'confirmed',
@@ -124,9 +106,13 @@ export class WebhookRepository {
         })
         .where('id', '=', intent.intentId)
         .where('tenantId', '=', intent.tenantId)
-        .execute();
+        .where('status', '=', 'pending')
+        .executeTakeFirst();
 
-      // 2. Mark charge as paid (only if linked)
+      // If no rows updated this was a race — another worker already processed it
+      if (!piResult || Number(piResult.numUpdatedRows) === 0) return;
+
+      // 2. Mark linked charge as paid
       if (intent.chargeId) {
         await trx
           .updateTable('charges')
@@ -144,7 +130,6 @@ export class WebhookRepository {
       }
 
       // 3. Post ledger: Dr 1400 Procesador / Cr 1300 CxC
-      //    (money now in processor's hands, clearing the receivable)
       const accounts = await trx
         .selectFrom('chartOfAccounts')
         .select(['id', 'code'])
@@ -157,10 +142,7 @@ export class WebhookRepository {
       const acc1400 = accounts.find((a) => a.code === '1400');
 
       if (acc1300 && acc1400) {
-        const txId = uuidv4();
-        const idempotencyKey = `payment.confirmed.${intent.intentId}`;
-
-        // Acquire ledger state lock (MVCC serialization for hash chain)
+        // Acquire serialization lock on ledger state (prevents hash chain races)
         const state = await trx
           .selectFrom('tenantLedgerState')
           .select(['currentHash', 'txCount'])
@@ -168,9 +150,11 @@ export class WebhookRepository {
           .forUpdate()
           .executeTakeFirstOrThrow();
 
+        const txId = uuidv4();
+        // idempotencyKey must be UUID — use payment intent ID (1:1 with payment tx)
+        const idempotencyKey = intent.intentId;
         const prevHash = state.currentHash;
-        const txData = `${idempotencyKey}:${intent.amount}:${prevHash}`;
-        const txHash = await computeHash(txData);
+        const txHash = computeHash(`${idempotencyKey}:${intent.amount}:${prevHash}`);
 
         await trx.insertInto('transactions').values({
           id: txId,
@@ -185,7 +169,6 @@ export class WebhookRepository {
           effectiveDate: new Date(),
           periodId: null,
           createdBy: 'system:wompi-webhook',
-          createdAt: new Date(),
         }).execute();
 
         await trx.insertInto('ledgerEntries').values([
@@ -193,34 +176,32 @@ export class WebhookRepository {
             id: uuidv4(),
             tenantId: intent.tenantId,
             transactionId: txId,
-            accountId: acc1400.id,      // Dr Procesador por Liquidar
+            accountId: acc1400.id,
             entryType: 'debit',
             amount: intent.amount,
             currency: 'COP',
             description: `Pago recibido vía Wompi`,
-            entryHash: await computeHash(`${txId}:${acc1400.id}:debit:${intent.amount}`),
-            createdAt: new Date(),
+            entryHash: computeHash(`${txId}:${acc1400.id}:debit:${intent.amount}`),
           },
           {
             id: uuidv4(),
             tenantId: intent.tenantId,
             transactionId: txId,
-            accountId: acc1300.id,      // Cr CxC Ordinaria
+            accountId: acc1300.id,
             entryType: 'credit',
             amount: intent.amount,
             currency: 'COP',
             description: `Cobro saldado — unidad ${intent.unitId}`,
-            entryHash: await computeHash(`${txId}:${acc1300.id}:credit:${intent.amount}`),
-            createdAt: new Date(),
+            entryHash: computeHash(`${txId}:${acc1300.id}:credit:${intent.amount}`),
           },
         ]).execute();
 
-        // Update ledger state hash chain
+        // Advance hash chain atomically
         await trx
           .updateTable('tenantLedgerState')
           .set({
             currentHash: txHash,
-            txCount: sql`${state.txCount} + 1`,
+            txCount: sql`tx_count + 1`,
             lastTxId: txId,
             updatedAt: new Date(),
           })
@@ -228,7 +209,7 @@ export class WebhookRepository {
           .execute();
       }
 
-      // 4. Create pago_confirmado alert
+      // 4. Alert — fire even without ledger accounts configured
       if (intent.chargeId) {
         await trx.insertInto('alerts').values({
           tenantId: intent.tenantId,
@@ -241,8 +222,8 @@ export class WebhookRepository {
         }).execute();
       }
 
-      // 5. Mark webhook event as processed
-      await db
+      // 5. Mark webhook processed (same transaction = atomic with everything above)
+      await trx
         .updateTable('webhookEvents')
         .set({
           processingStatus: 'processed',
@@ -254,7 +235,7 @@ export class WebhookRepository {
     });
   }
 
-  // ── Decline payment: update intent ────────────────────────────────────────
+  // ── Decline payment ────────────────────────────────────────────────────────
   async declinePayment(opts: {
     webhookEventId: string;
     intent: MatchedIntent;
@@ -274,20 +255,20 @@ export class WebhookRepository {
         .where('id', '=', opts.intent.intentId)
         .where('tenantId', '=', opts.intent.tenantId)
         .execute();
-    });
 
-    await db
-      .updateTable('webhookEvents')
-      .set({
-        processingStatus: 'processed',
-        relatedIntentId: opts.intent.intentId,
-        processedAt: new Date(),
-      })
-      .where('id', '=', opts.webhookEventId)
-      .execute();
+      await trx
+        .updateTable('webhookEvents')
+        .set({
+          processingStatus: 'processed',
+          relatedIntentId: opts.intent.intentId,
+          processedAt: new Date(),
+        })
+        .where('id', '=', opts.webhookEventId)
+        .execute();
+    });
   }
 
-  // ── Suspense: payment arrived with no matching intent ─────────────────────
+  // ── Suspense: unmatched payment ────────────────────────────────────────────
   async createSuspenseEntry(opts: {
     webhookEventId: string;
     amount: bigint;
@@ -299,7 +280,6 @@ export class WebhookRepository {
       amount: opts.amount,
       currency: opts.currency,
       reason: opts.reason,
-      createdAt: new Date(),
     }).execute();
 
     await db
@@ -316,9 +296,26 @@ export class WebhookRepository {
       .where('id', '=', webhookEventId)
       .execute();
   }
+
+  private mapIntent(row: {
+    id: string;
+    tenantId: string;
+    chargeId: string | null;
+    amount: bigint | string;
+    unitId: string;
+    userId: string;
+  }): MatchedIntent {
+    return {
+      intentId: row.id,
+      tenantId: row.tenantId,
+      chargeId: row.chargeId ?? null,
+      amount: typeof row.amount === 'bigint' ? row.amount : BigInt(String(row.amount)),
+      unitId: row.unitId,
+      userId: row.userId,
+    };
+  }
 }
 
-async function computeHash(data: string): Promise<string> {
-  const { createHash } = await import('node:crypto');
+function computeHash(data: string): string {
   return createHash('sha256').update(data).digest('hex');
 }
