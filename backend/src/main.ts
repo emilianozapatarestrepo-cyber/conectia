@@ -12,6 +12,7 @@ import { createLedgerRouter } from './modules/ledger/presentation/ledger.routes.
 import { createDashboardRouter } from './modules/dashboard/presentation/dashboard.routes.js';
 import { createChargesRouter } from './modules/charges/presentation/charges.routes.js';
 import { createExportRouter } from './modules/export/presentation/export.routes.js';
+import { createWebhookRouter } from './modules/webhooks/presentation/webhook.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -56,6 +57,9 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/dashboard', createDashboardRouter());
   app.use('/api/v1/charges', createChargesRouter());
   app.use('/api/v1/export', createExportRouter());
+
+  // ── Webhook endpoints (no auth — verified by HMAC signature) ──
+  app.use('/webhooks', createWebhookRouter());
 
   // ── Global Error Handler (must be last) ──
   app.use(globalErrorHandler);
