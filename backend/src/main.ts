@@ -13,6 +13,7 @@ import { createDashboardRouter } from './modules/dashboard/presentation/dashboar
 import { createChargesRouter } from './modules/charges/presentation/charges.routes.js';
 import { createExportRouter } from './modules/export/presentation/export.routes.js';
 import { createWebhookRouter } from './modules/webhooks/presentation/webhook.routes.js';
+import { createTenantsRouter } from './modules/tenants/presentation/tenants.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -57,6 +58,9 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/dashboard', createDashboardRouter());
   app.use('/api/v1/charges', createChargesRouter());
   app.use('/api/v1/export', createExportRouter());
+
+  // ── Platform-internal endpoints ──
+  app.use('/api/v1/tenants', createTenantsRouter());
 
   // ── Webhook endpoints (no auth — verified by HMAC signature) ──
   app.use('/webhooks', createWebhookRouter());

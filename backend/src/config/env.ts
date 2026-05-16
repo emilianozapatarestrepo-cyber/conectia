@@ -21,6 +21,9 @@ const envSchema = z.object({
   WOMPI_INTEGRITY_SECRET: z.string().min(1).optional(),
   WOMPI_PUBLIC_KEY: z.string().min(1).optional(),
 
+  // Platform (Conectia internal — not exposed to buildings)
+  PLATFORM_API_KEY: z.string().min(32).optional(),
+
   // App
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   CORS_ORIGIN: z.string().default('*'),
