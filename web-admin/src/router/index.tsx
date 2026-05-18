@@ -11,13 +11,16 @@ const MorosidadPage    = lazy(() => import('@/pages/MorosidadPage'));
 const ConciliacionPage = lazy(() => import('@/pages/ConciliacionPage'));
 const AsambleaPage     = lazy(() => import('@/pages/AsambleaPage'));
 const LoginPage        = lazy(() => import('@/pages/LoginPage'));
+const PayPage          = lazy(() => import('@/pages/PayPage'));
 
 const Suspensed = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
 );
 
 export const router = createBrowserRouter([
-  { path: '/login', element: <Suspensed><LoginPage /></Suspensed> },
+  { path: '/login',          element: <Suspensed><LoginPage /></Suspensed> },
+  // Public — no auth required. Residents land here from WhatsApp/SMS links.
+  { path: '/pay/:reference', element: <Suspensed><PayPage /></Suspensed> },
   {
     element: <ProtectedRoute />,
     children: [{

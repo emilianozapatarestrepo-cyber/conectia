@@ -24,6 +24,9 @@ const envSchema = z.object({
   // Platform (Conectia internal — not exposed to buildings)
   PLATFORM_API_KEY: z.string().min(32).optional(),
 
+  // Public app URL (used in redirect URLs sent to residents)
+  APP_URL: z.string().url().optional(),
+
   // App
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   CORS_ORIGIN: z.string().default('*'),

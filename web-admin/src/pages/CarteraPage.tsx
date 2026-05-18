@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback } from 'react';
 import { useCharges } from '@/hooks/useCharges';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { formatCOP, formatDate, formatPeriod } from '@/lib/formatters';
+import { PeriodSelector } from '@/components/ui/PeriodSelector';
+import { formatCOP, formatDate } from '@/lib/formatters';
 import { api } from '@/lib/api';
 import type { Charge } from '@/lib/schemas';
 
@@ -126,14 +127,6 @@ function currentPeriod(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function last12Months(): { value: string; label: string }[] {
-  return Array.from({ length: 12 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    return { value, label: formatPeriod(value) };
-  });
-}
 
 async function downloadBlob(path: string, filename: string) {
   const { data } = await api.get<Blob>(path, { responseType: 'blob' });
@@ -233,15 +226,7 @@ export default function CarteraPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-white font-bold text-base">Cartera</h1>
         <div className="flex items-center gap-3">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="bg-surface-card border border-surface-border text-white text-sm rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-primary"
-          >
-            {last12Months().map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+          <PeriodSelector value={period} onChange={setPeriod} />
 
           <button
             onClick={handleExport}
@@ -265,7 +250,7 @@ export default function CarteraPage() {
       {/* ── Efectividad progress bar ── */}
       <div className="bg-surface-card rounded-lg px-4 py-3">
         <div className="flex justify-between text-[11px] mb-2">
-          <span className="text-slate-400">Efectividad de cobro — {formatPeriod(period)}</span>
+          <span className="text-slate-400">Efectividad de cobro — {period}</span>
           <span className={
             kpis.efectividad >= 90 ? 'text-status-green font-bold' :
             kpis.efectividad >= 70 ? 'text-status-yellow font-bold' :
