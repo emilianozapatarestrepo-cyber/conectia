@@ -38,12 +38,20 @@ export class DashboardRepository implements IDashboardRepository {
         ])
         .executeTakeFirstOrThrow();
 
-      // Count pending reconciliation payment intents
+      // Count pending reconciliation payment intents (status=pending, awaiting admin approval)
       const piRow = await trx
         .selectFrom('paymentIntents')
         .where('tenantId', '=', tenantId)
         .where('status', '=', 'pending')
         .select((eb) => [eb.fn.count<string>('id').as('count')])
+        .executeTakeFirstOrThrow();
+
+      // Sum confirmed intents not yet settled (in processor, not yet in bank)
+      const settlementRow = await trx
+        .selectFrom('paymentIntents')
+        .where('tenantId', '=', tenantId)
+        .where('status', '=', 'confirmed')
+        .select((eb) => [eb.fn.sum<string>('amount').as('total')])
         .executeTakeFirstOrThrow();
 
       const total = Number(row.total) || 0;
@@ -66,6 +74,7 @@ export class DashboardRepository implements IDashboardRepository {
         collectedPct: total > 0 ? Math.round((paid / total) * 100) : 0,
         delinquentPct: total > 0 ? Math.round((overdue / total) * 100) : 0,
         pendingReconciliationCount: Number(piRow.count),
+        pendingSettlementAmount: BigInt(settlementRow.total ?? '0'),
         currentDay: now.getDate(),
         daysInMonth: new Date(year, month, 0).getDate(),
         prevPeriodCollectedPct: null,

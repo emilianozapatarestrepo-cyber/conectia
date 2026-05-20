@@ -5,6 +5,8 @@ import { ReconcileUseCase } from '../application/reconcile.usecase.js';
 import { CreateChargeUseCase } from '../application/create-charge.usecase.js';
 import { BatchChargesUseCase } from '../application/batch-charges.usecase.js';
 import { PaymentLinkUseCase } from '../application/payment-link.usecase.js';
+import { SettlementUseCase } from '../application/settlement.usecase.js';
+import { db } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
 
 const createChargeSchema = z.object({
@@ -40,6 +42,7 @@ export function createChargesRouter(): Router {
   const createChargeUC = new CreateChargeUseCase();
   const batchChargesUC = new BatchChargesUseCase();
   const paymentLinkUC = new PaymentLinkUseCase();
+  const settlementUC = new SettlementUseCase();
 
   // GET /charges?period=YYYY-MM&status=pending|paid|overdue|all&unitId=
   router.get('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
@@ -138,6 +141,34 @@ export function createChargesRouter(): Router {
       const intentId = req.params['id'] as string;
       await reconcileUC.execute(req.user!.tenantId!, intentId, action, req.user!.uid, reason);
       res.json({ success: true });
+    } catch (err) { next(err); }
+  });
+
+  // GET /charges/settlement — total amount of confirmed intents pending settlement
+  router.get('/settlement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const rows = await db
+        .selectFrom('paymentIntents')
+        .select((eb) => [
+          eb.fn.count<string>('id').as('count'),
+          eb.fn.sum<string>('amount').as('total'),
+        ])
+        .where('tenantId', '=', tenantId)
+        .where('status', '=', 'confirmed')
+        .executeTakeFirstOrThrow();
+      res.json({
+        pendingCount: Number(rows.count),
+        pendingAmount: (rows.total ?? '0').toString(),
+      });
+    } catch (err) { next(err); }
+  });
+
+  // POST /charges/settlement — post Dr 1100 / Cr 1400 for all confirmed intents
+  router.post('/settlement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+    try {
+      const result = await settlementUC.execute(req.user!.tenantId!, req.user!.uid);
+      res.json({ ...result, totalAmount: result.totalAmount.toString() });
     } catch (err) { next(err); }
   });
 
