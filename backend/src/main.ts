@@ -16,6 +16,7 @@ import { createWebhookRouter } from './modules/webhooks/presentation/webhook.rou
 import { createTenantsRouter } from './modules/tenants/presentation/tenants.routes.js';
 import { createPeriodsRouter } from './modules/periods/presentation/periods.routes.js';
 import { createPayRouter } from './modules/pay/presentation/pay.routes.js';
+import { createUnitsRouter } from './modules/units/presentation/units.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -64,6 +65,7 @@ async function bootstrap(): Promise<void> {
   // ── Platform-internal endpoints ──
   app.use('/api/v1/tenants', createTenantsRouter());
   app.use('/api/v1/periods', createPeriodsRouter());
+  app.use('/api/v1/units',   createUnitsRouter());
 
   // ── Public endpoints (no auth) ──
   app.use('/api/v1/pay', createPayRouter());

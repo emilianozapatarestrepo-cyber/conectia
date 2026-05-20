@@ -74,18 +74,39 @@ export function createChargesRouter(): Router {
     } catch (err) { next(err); }
   });
 
-  // POST /charges/batch — create charges for multiple units in one call
+  // POST /charges/batch — create charges for multiple units, or pull from the unit roster
+  // Body A (explicit): { units: [...], concept, dueDate, periodId }
+  // Body B (roster):   { useRoster: true, concept, dueDate, periodId }
   router.post('/batch', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
     try {
-      const body = batchChargeSchema.parse(req.body);
+      const tenantId  = req.user!.tenantId!;
+      const createdBy = req.user!.uid;
+
+      const body = z.union([
+        batchChargeSchema,
+        z.object({
+          useRoster: z.literal(true),
+          concept:   z.string().min(1).max(200),
+          dueDate:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          periodId:  z.string().uuid().nullable().default(null),
+        }),
+      ]).parse(req.body);
+
+      const isRoster = 'useRoster' in body && body.useRoster;
+
       const result = await batchChargesUC.execute({
-        tenantId: req.user!.tenantId!,
-        units: body.units.map((u) => ({ ...u, amount: BigInt(u.amount) })),
-        concept: body.concept,
-        dueDate: new Date(body.dueDate),
+        tenantId,
+        useRoster:    isRoster ? true : undefined,
+        rosterUserId: isRoster ? req.user!.uid : undefined,
+        units:        !isRoster && 'units' in body
+          ? body.units.map((u) => ({ ...u, amount: BigInt(u.amount) }))
+          : undefined,
+        concept:  body.concept,
+        dueDate:  new Date(body.dueDate),
         periodId: body.periodId,
-        createdBy: req.user!.uid,
+        createdBy,
       });
+
       const status = result.failed === 0 ? 201 : result.created === 0 ? 422 : 207;
       res.status(status).json(result);
     } catch (err) { next(err); }
