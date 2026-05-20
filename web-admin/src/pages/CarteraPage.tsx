@@ -136,6 +136,151 @@ function PaymentLinkModal({ charge, onClose }: PaymentLinkModalProps) {
   );
 }
 
+// ── Bulk WhatsApp notification modal ─────────────────────────────────────────
+
+interface BulkLinkResult {
+  chargeId:    string;
+  ok:          boolean;
+  whatsappUrl: string | null;
+  ownerPhone:  string | null;
+  error?:      string;
+}
+
+interface BulkNotifyModalProps {
+  charges: Charge[];
+  onClose: () => void;
+}
+
+function BulkNotifyModal({ charges, onClose }: BulkNotifyModalProps) {
+  const [results, setResults] = useState<BulkLinkResult[] | null>(null);
+  const [loading, setLoading]  = useState(false);
+  const [error, setError]      = useState<string | null>(null);
+  const [sent, setSent]        = useState<Set<string>>(new Set());
+
+  const chargeMap = useMemo(
+    () => new Map(charges.map((c) => [c.id, c])),
+    [charges],
+  );
+
+  const generate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.post<BulkLinkResult[]>('/charges/bulk-links', {
+        chargeIds: charges.map((c) => c.id),
+      });
+      setResults(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error generando links');
+    } finally {
+      setLoading(false);
+    }
+  }, [charges]);
+
+  // Auto-generate on mount
+  useState(() => { void generate(); });
+
+  const withPhone    = results?.filter((r) => r.ok && r.whatsappUrl) ?? [];
+  const withoutPhone = results?.filter((r) => r.ok && !r.whatsappUrl) ?? [];
+
+  const markSent = (chargeId: string) =>
+    setSent((prev) => new Set(prev).add(chargeId));
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-surface-card border border-surface-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border flex-shrink-0">
+          <div>
+            <h2 className="text-white font-semibold text-sm">Notificar pendientes</h2>
+            {results && (
+              <p className="text-slate-400 text-[11px] mt-0.5">
+                {withPhone.length} con WhatsApp · {sent.size} enviados
+                {withoutPhone.length > 0 && ` · ${withoutPhone.length} sin teléfono`}
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1">
+            <XIcon />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+          {loading && (
+            <div className="flex items-center justify-center py-10 gap-2 text-slate-400 text-sm">
+              <SpinnerIcon />
+              Generando links de pago…
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-900/20 rounded-lg px-3 py-2 text-red-400 text-[11px]">
+              {error}
+              <button onClick={() => void generate()} className="ml-2 underline">Reintentar</button>
+            </div>
+          )}
+          {withPhone.map((r) => {
+            const charge = chargeMap.get(r.chargeId);
+            const isSent = sent.has(r.chargeId);
+            return (
+              <div key={r.chargeId}
+                className="flex items-center justify-between gap-3 bg-surface-hover rounded-lg px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-white text-[12px] font-medium truncate">
+                    {charge?.unitLabel ?? r.chargeId}
+                  </p>
+                  <p className="text-slate-400 text-[10px]">
+                    {charge ? formatCOP(charge.amount) : ''} · {r.ownerPhone}
+                  </p>
+                </div>
+                {isSent ? (
+                  <span className="flex items-center gap-1 text-[#25D366] text-[11px] font-semibold flex-shrink-0">
+                    <CheckIcon />
+                    Enviado
+                  </span>
+                ) : (
+                  <a
+                    href={r.whatsappUrl!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => markSent(r.chargeId)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[11px] font-semibold transition-colors flex-shrink-0"
+                  >
+                    <WhatsAppInlineIcon />
+                    Enviar
+                  </a>
+                )}
+              </div>
+            );
+          })}
+          {withoutPhone.length > 0 && results && (
+            <p className="text-slate-600 text-[10px] text-center pt-2">
+              {withoutPhone.length} unidad{withoutPhone.length > 1 ? 'es' : ''} sin teléfono — agrégalo en Unidades
+            </p>
+          )}
+          {results && withPhone.length === 0 && (
+            <div className="text-center py-10 text-slate-500 text-sm">
+              Ninguna unidad pendiente tiene teléfono registrado
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {withPhone.length > 0 && sent.size < withPhone.length && results && (
+          <div className="px-5 py-3 border-t border-surface-border flex-shrink-0">
+            <p className="text-slate-400 text-[10px] text-center">
+              Haz clic en cada "Enviar" para abrir WhatsApp con el mensaje pre-llenado
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type AgingKey = 'corriente' | '1-30' | '31-60' | '61-90' | '+90';
 
 function agingKey(dueDate: Date): AgingKey {
@@ -203,6 +348,7 @@ export default function CarteraPage() {
   const [period, setPeriod]         = useState(currentPeriod());
   const [exporting, setExporting]   = useState(false);
   const [cobrarCharge, setCobrarCharge] = useState<Charge | null>(null);
+  const [showBulkNotify, setShowBulkNotify] = useState(false);
   const { data: charges = [], isLoading } = useCharges({ status: 'all', period });
 
   const columns = useMemo(() => makeColumns(setCobrarCharge), []);
@@ -253,6 +399,15 @@ export default function CarteraPage() {
         <div className="flex items-center gap-3">
           <PeriodSelector value={period} onChange={setPeriod} />
 
+          {pending.length > 0 && (
+            <button
+              onClick={() => setShowBulkNotify(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366]/10 border border-[#25D366]/30 hover:bg-[#25D366]/20 text-[#25D366] text-[11px] font-semibold rounded-md transition-colors"
+            >
+              <WhatsAppInlineIcon />
+              Notificar pendientes
+            </button>
+          )}
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -334,6 +489,13 @@ export default function CarteraPage() {
         <PaymentLinkModal
           charge={cobrarCharge}
           onClose={() => setCobrarCharge(null)}
+        />
+      )}
+
+      {showBulkNotify && (
+        <BulkNotifyModal
+          charges={pending}
+          onClose={() => setShowBulkNotify(false)}
         />
       )}
     </div>

@@ -144,6 +144,33 @@ export function createChargesRouter(): Router {
     } catch (err) { next(err); }
   });
 
+  // POST /charges/bulk-links — generate / reuse payment links for multiple charges in parallel
+  // Body: { chargeIds: string[] }  (max 200)
+  router.post('/bulk-links', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+    try {
+      const { chargeIds } = z.object({
+        chargeIds: z.array(z.string().uuid()).min(1).max(200),
+      }).parse(req.body);
+
+      const tenantId = req.user!.tenantId!;
+      const actorId  = req.user!.uid;
+
+      const results = await Promise.allSettled(
+        chargeIds.map((chargeId) =>
+          paymentLinkUC.execute({ tenantId, chargeId, actorId }),
+        ),
+      );
+
+      const payload = results.map((r, i) =>
+        r.status === 'fulfilled'
+          ? { chargeId: chargeIds[i], ...r.value, ok: true as const }
+          : { chargeId: chargeIds[i], ok: false as const, error: (r.reason as Error).message },
+      );
+
+      res.json(payload);
+    } catch (err) { next(err); }
+  });
+
   // GET /charges/settlement — total amount of confirmed intents pending settlement
   router.get('/settlement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
     try {
