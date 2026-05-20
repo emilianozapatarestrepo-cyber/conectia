@@ -11,6 +11,7 @@ export interface DashboardSummary {
   collectedPct: number;        // 0-100
   delinquentPct: number;       // 0-100
   pendingReconciliationCount: number;
+  pendingSettlementAmount: bigint; // confirmed PIs not yet posted to bank
   currentDay: number;
   daysInMonth: number;
   prevPeriodCollectedPct: number | null;

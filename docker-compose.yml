@@ -1,0 +1,66 @@
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  # Migrations in ./backend/migrations/ run automatically on first boot via
+  # the postgres docker-entrypoint-initdb.d mechanism (alphabetical order).
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-conectia}
+      POSTGRES_USER:     ${POSTGRES_USER:-conectia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-conectia} -d ${POSTGRES_DB:-conectia}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      target: runner
+    restart: unless-stopped
+    environment:
+      NODE_ENV:              production
+      PORT:                  3000
+      DATABASE_URL:          postgres://${POSTGRES_USER:-conectia}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-conectia}
+      DB_POOL_MIN:           2
+      DB_POOL_MAX:           10
+      DB_SSL:                "false"
+      FIREBASE_PROJECT_ID:   ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY:  ${FIREBASE_PRIVATE_KEY}
+      CORS_ORIGIN:           ${CORS_ORIGIN:-*}
+      LOG_LEVEL:             ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Web Admin (nginx + React SPA) ────────────────────────────────────────────
+  web:
+    build:
+      context: ./web-admin
+      target: runner
+      args:
+        VITE_API_URL: /api/v1
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

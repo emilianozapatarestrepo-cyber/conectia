@@ -77,9 +77,9 @@ export default function ResumenPage() {
           color="red"
         />
         <KpiCard
-          label="POR CONCILIAR"
-          value={`${summary.pendingReconciliationCount}`}
-          subValue={summary.pendingReconciliationCount > 0 ? 'pagos pendientes' : 'al día'}
+          label="EN PROCESADOR"
+          value={formatCOP(summary.pendingSettlementAmount)}
+          subValue={summary.pendingSettlementAmount > 0n ? 'pendiente de liquidar' : 'al día'}
           color="blue"
         />
       </div>

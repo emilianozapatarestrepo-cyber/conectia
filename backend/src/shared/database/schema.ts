@@ -236,6 +236,20 @@ export interface PeriodsTable {
 export type AlertType = 'mora_critica' | 'mora_nueva' | 'conciliacion_pendiente' | 'vencimiento_proximo' | 'pago_confirmado';
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 
+export interface UnitsTable {
+  id:         Generated<string>;
+  tenantId:   string;
+  unitId:     string;          // building-scoped identifier: "A-101"
+  label:      string;
+  ownerName:  string | null;
+  phone:      string | null;   // Colombian mobile without +57
+  email:      string | null;
+  feeAmount:  ColumnType<bigint | string, bigint | number | string, bigint | number | string>;
+  active:     Generated<boolean>;
+  createdAt:  Generated<Date>;
+  updatedAt:  Generated<Date>;
+}
+
 export interface AlertsTable {
   id: Generated<string>;
   tenantId: string;
@@ -270,6 +284,7 @@ export interface DB {
   tenantMemberships: TenantMembershipsTable;
   periods: PeriodsTable;
   alerts: AlertsTable;
+  units: UnitsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────

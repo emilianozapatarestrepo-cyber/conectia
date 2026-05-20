@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw, Presentation, Settings } from 'lucide-react';
+import { BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw, Presentation, Settings, Building2 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const NAV_ITEMS = [
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/cartera',      icon: FileText,      label: 'Cartera' },
   { to: '/morosidad',    icon: AlertTriangle, label: 'Morosidad' },
   { to: '/conciliacion', icon: RefreshCw,     label: 'Conciliación' },
+  { to: '/unidades',     icon: Building2,     label: 'Unidades' },
 ] as const;
 
 export function Sidebar() {

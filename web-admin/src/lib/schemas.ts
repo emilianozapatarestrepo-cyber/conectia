@@ -16,6 +16,7 @@ export const dashboardSummarySchema = z.object({
   collectedPct: z.number(),
   delinquentPct: z.number(),
   pendingReconciliationCount: z.number(),
+  pendingSettlementAmount: bigintStr,
   currentDay: z.number(),
   daysInMonth: z.number(),
   prevPeriodCollectedPct: z.number().nullable(),

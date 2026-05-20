@@ -12,6 +12,11 @@ import { createLedgerRouter } from './modules/ledger/presentation/ledger.routes.
 import { createDashboardRouter } from './modules/dashboard/presentation/dashboard.routes.js';
 import { createChargesRouter } from './modules/charges/presentation/charges.routes.js';
 import { createExportRouter } from './modules/export/presentation/export.routes.js';
+import { createWebhookRouter } from './modules/webhooks/presentation/webhook.routes.js';
+import { createTenantsRouter } from './modules/tenants/presentation/tenants.routes.js';
+import { createPeriodsRouter } from './modules/periods/presentation/periods.routes.js';
+import { createPayRouter } from './modules/pay/presentation/pay.routes.js';
+import { createUnitsRouter } from './modules/units/presentation/units.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -56,6 +61,17 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/dashboard', createDashboardRouter());
   app.use('/api/v1/charges', createChargesRouter());
   app.use('/api/v1/export', createExportRouter());
+
+  // ── Platform-internal endpoints ──
+  app.use('/api/v1/tenants', createTenantsRouter());
+  app.use('/api/v1/periods', createPeriodsRouter());
+  app.use('/api/v1/units',   createUnitsRouter());
+
+  // ── Public endpoints (no auth) ──
+  app.use('/api/v1/pay', createPayRouter());
+
+  // ── Webhook endpoints (no auth — verified by HMAC signature) ──
+  app.use('/webhooks', createWebhookRouter());
 
   // ── Global Error Handler (must be last) ──
   app.use(globalErrorHandler);
