@@ -34,3 +34,4 @@ DerivedData/
 
 # Docker override (local overrides only)
 docker-compose.override.yml
+.gstack/
