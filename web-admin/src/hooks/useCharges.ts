@@ -5,7 +5,7 @@ import { chargeSchema } from '@/lib/schemas';
 
 interface ChargeFilter { period?: string; status?: string; unitId?: string }
 
-export function useCharges(filter: ChargeFilter = {}) {
+export function useCharges(filter: ChargeFilter = {}, refetchInterval?: number) {
   return useQuery({
     queryKey: ['charges', filter],
     queryFn: async () => {
@@ -13,5 +13,6 @@ export function useCharges(filter: ChargeFilter = {}) {
       return z.array(chargeSchema).parse(data);
     },
     staleTime: 30_000,
+    refetchInterval,
   });
 }
