@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { withTenantTransaction } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 
 const unitSchema = z.object({
   unitId:    z.string().min(1).max(50),
@@ -20,8 +21,10 @@ const updateUnitSchema = unitSchema.partial().extend({
 export function createUnitsRouter(): Router {
   const router = Router();
 
+  router.use(requireAuth, requireTenant, requireSubscription);
+
   // GET /units
-  router.get('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/', requireAdmin, async (req, res, next) => {
     try {
       const tenantId = req.user!.tenantId!;
       const rows = await withTenantTransaction(tenantId, async (trx) =>
@@ -41,10 +44,24 @@ export function createUnitsRouter(): Router {
   });
 
   // POST /units — create single unit
-  router.post('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/', requireAdmin, async (req, res, next) => {
     try {
       const body = unitSchema.parse(req.body);
       const tenantId = req.user!.tenantId!;
+
+      // Enforce plan unit limit
+      const maxUnits = req.subscription?.maxUnits;
+      if (maxUnits != null) {
+        const { count } = await withTenantTransaction(tenantId, async (trx) =>
+          trx.selectFrom('units').select((eb) => eb.fn.countAll<string>().as('count'))
+            .where('tenantId', '=', tenantId).where('active', '=', true).executeTakeFirstOrThrow()
+        );
+        if (Number(count) >= maxUnits) {
+          res.status(402).json({ error: 'UNIT_LIMIT_REACHED', limit: maxUnits });
+          return;
+        }
+      }
+
       const id = uuidv4();
 
       await withTenantTransaction(tenantId, async (trx) =>
@@ -65,7 +82,7 @@ export function createUnitsRouter(): Router {
   });
 
   // POST /units/import — bulk upsert (idempotent by unit_id)
-  router.post('/import', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/import', requireAdmin, async (req, res, next) => {
     try {
       const body = z.object({
         units: z.array(unitSchema).min(1).max(500),
@@ -112,7 +129,7 @@ export function createUnitsRouter(): Router {
   });
 
   // PUT /units/:id
-  router.put('/:id', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.put('/:id', requireAdmin, async (req, res, next) => {
     try {
       const id = z.string().uuid().parse(req.params['id']);
       const body = updateUnitSchema.parse(req.body);
@@ -136,7 +153,7 @@ export function createUnitsRouter(): Router {
   });
 
   // DELETE /units/:id — soft delete
-  router.delete('/:id', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.delete('/:id', requireAdmin, async (req, res, next) => {
     try {
       const id = z.string().uuid().parse(req.params['id']);
       const tenantId = req.user!.tenantId!;

@@ -52,7 +52,14 @@ export function Sidebar() {
         </NavLink>
         <NavLink
           to="/configuracion"
-          className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:text-white hover:bg-surface-hover mt-1"
+          className={({ isActive }) =>
+            clsx(
+              'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors mt-1',
+              isActive
+                ? 'bg-brand-primary/15 text-brand-primary font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-surface-hover'
+            )
+          }
         >
           <Settings size={15} />
           <span>Configuración</span>

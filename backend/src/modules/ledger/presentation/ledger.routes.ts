@@ -10,11 +10,11 @@ import {
   requireTenant,
   requireAdmin,
 } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 
 export function createLedgerRouter(): Router {
   const router = Router();
 
-  // ── Wire dependencies (Poor Man's DI — replace with container later) ──
   const txRepo = new TransactionRepository();
   const accountRepo = new AccountRepository();
   const auditRepo = new AuditRepository();
@@ -24,25 +24,11 @@ export function createLedgerRouter(): Router {
 
   const controller = new LedgerController(postTxUseCase, getBalancesUseCase);
 
-  // ── Middleware chain: requireAuth → requireTenant → role check → handler ──
-  // requireAuth:   verifies Firebase JWT (identity)
-  // requireTenant: resolves tenant+role from tenant_memberships DB (authorization)
-  // requireAdmin:  checks role === 'admin' (resolved from DB, not custom claims)
+  router.use(requireAuth, requireTenant, requireSubscription);
 
-  // Post a double-entry transaction (admin only)
-  router.post(
-    '/transactions',
-    requireAuth,
-    requireTenant,
-    requireAdmin,
-    controller.postTransaction,
-  );
-
-  // Get all account balances for a tenant (any authenticated tenant member)
-  router.get('/balances', requireAuth, requireTenant, controller.getBalances);
-
-  // Get single account balance (any authenticated tenant member)
-  router.get('/balances/:accountId', requireAuth, requireTenant, controller.getAccountBalance);
+  router.post('/transactions', requireAdmin, controller.postTransaction);
+  router.get('/balances', controller.getBalances);
+  router.get('/balances/:accountId', controller.getAccountBalance);
 
   return router;
 }

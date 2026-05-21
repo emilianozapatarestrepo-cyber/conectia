@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 import { ChargesRepository } from '../../charges/infrastructure/charges.repository.js';
 import { generateStatementPDF } from '../infrastructure/pdf.generator.js';
 import { generatePortfolioExcel } from '../infrastructure/excel.generator.js';
@@ -9,8 +10,10 @@ export function createExportRouter(): Router {
   const router = Router();
   const chargesRepo = new ChargesRepository();
 
+  router.use(requireAuth, requireTenant, requireSubscription);
+
   // GET /export/statement?unitId=&period=YYYY-MM
-  router.get('/statement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/statement', requireAdmin, async (req, res, next) => {
     try {
       const { unitId, period } = z.object({
         unitId: z.string().regex(/^[A-Za-z0-9_\-]{1,64}$/, 'unitId must be alphanumeric'),
@@ -55,7 +58,7 @@ export function createExportRouter(): Router {
   });
 
   // GET /export/portfolio?period=YYYY-MM
-  router.get('/portfolio', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/portfolio', requireAdmin, async (req, res, next) => {
     try {
       const { period } = z.object({
         period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),

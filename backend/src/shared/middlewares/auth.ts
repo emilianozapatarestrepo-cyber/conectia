@@ -60,7 +60,8 @@ export interface AuthenticatedUser {
 declare global {
   namespace Express {
     interface Request {
-      user?: AuthenticatedUser;
+      user?:         AuthenticatedUser;
+      subscription?: import('../../modules/billing/application/billing.service.js').SubscriptionView;
     }
   }
 }

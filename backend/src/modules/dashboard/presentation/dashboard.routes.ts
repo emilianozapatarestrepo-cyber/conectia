@@ -10,6 +10,7 @@ import {
   requireTenant,
   requireAdmin,
 } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 
 export function createDashboardRouter(): Router {
   const router = Router();
@@ -20,12 +21,13 @@ export function createDashboardRouter(): Router {
     new GetAlertsUseCase(repo),
   );
 
-  // All dashboard endpoints require auth + tenant resolution + admin role
-  router.get('/summary', requireAuth, requireTenant, requireAdmin, controller.summary);
-  router.get('/trend',   requireAuth, requireTenant, requireAdmin, controller.trend);
-  router.get('/alerts',  requireAuth, requireTenant, requireAdmin, controller.alerts);
+  router.use(requireAuth, requireTenant, requireSubscription);
 
-  router.get('/delinquent', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/summary', requireAdmin, controller.summary);
+  router.get('/trend',   requireAdmin, controller.trend);
+  router.get('/alerts',  requireAdmin, controller.alerts);
+
+  router.get('/delinquent', requireAdmin, async (req, res, next) => {
     try {
       const units = await repo.getDelinquent(req.user!.tenantId!);
       res.json(units.map((u) => ({ ...u, totalOwed: u.totalOwed.toString() })));
@@ -33,7 +35,7 @@ export function createDashboardRouter(): Router {
   });
 
   // POST /dashboard/mark-overdue — promote past-due active charges to overdue status
-  router.post('/mark-overdue', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/mark-overdue', requireAdmin, async (req, res, next) => {
     try {
       const result = await new MarkOverdueUseCase().execute(req.user!.tenantId!);
       res.json({ ...result, totalAmount: result.totalAmount.toString() });

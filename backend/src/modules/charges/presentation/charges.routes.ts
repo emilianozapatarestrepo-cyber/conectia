@@ -8,6 +8,7 @@ import { PaymentLinkUseCase } from '../application/payment-link.usecase.js';
 import { SettlementUseCase } from '../application/settlement.usecase.js';
 import { db } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 
 const createChargeSchema = z.object({
   unitId: z.string().min(1),
@@ -44,8 +45,10 @@ export function createChargesRouter(): Router {
   const paymentLinkUC = new PaymentLinkUseCase();
   const settlementUC = new SettlementUseCase();
 
+  router.use(requireAuth, requireTenant, requireSubscription);
+
   // GET /charges?period=YYYY-MM&status=pending|paid|overdue|all&unitId=
-  router.get('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/', requireAdmin, async (req, res, next) => {
     try {
       const filter = z.object({
         period: z.string().optional(),
@@ -58,7 +61,7 @@ export function createChargesRouter(): Router {
   });
 
   // POST /charges — create a charge + post ledger entry
-  router.post('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/', requireAdmin, async (req, res, next) => {
     try {
       const body = createChargeSchema.parse(req.body);
       const result = await createChargeUC.execute({
@@ -80,7 +83,7 @@ export function createChargesRouter(): Router {
   // POST /charges/batch — create charges for multiple units, or pull from the unit roster
   // Body A (explicit): { units: [...], concept, dueDate, periodId }
   // Body B (roster):   { useRoster: true, concept, dueDate, periodId }
-  router.post('/batch', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/batch', requireAdmin, async (req, res, next) => {
     try {
       const tenantId  = req.user!.tenantId!;
       const createdBy = req.user!.uid;
@@ -116,7 +119,7 @@ export function createChargesRouter(): Router {
   });
 
   // GET /charges/delinquent
-  router.get('/delinquent', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/delinquent', requireAdmin, async (req, res, next) => {
     try {
       const list = await repo.getDelinquent(req.user!.tenantId!);
       res.json(list.map((c) => ({ ...c, amount: c.amount.toString() })));
@@ -124,7 +127,7 @@ export function createChargesRouter(): Router {
   });
 
   // GET /charges/reconciliation
-  router.get('/reconciliation', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/reconciliation', requireAdmin, async (req, res, next) => {
     try {
       const list = await repo.getPendingReconciliation(req.user!.tenantId!);
       res.json(list.map((pi) => ({ ...pi, amount: pi.amount.toString() })));
@@ -132,7 +135,7 @@ export function createChargesRouter(): Router {
   });
 
   // POST /charges/reconciliation/:id
-  router.post('/reconciliation/:id', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/reconciliation/:id', requireAdmin, async (req, res, next) => {
     try {
       const { action, reason } = z.object({
         action: z.enum(['approve', 'reject']),
@@ -146,7 +149,7 @@ export function createChargesRouter(): Router {
 
   // POST /charges/bulk-links — generate / reuse payment links for multiple charges in parallel
   // Body: { chargeIds: string[] }  (max 200)
-  router.post('/bulk-links', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/bulk-links', requireAdmin, async (req, res, next) => {
     try {
       const { chargeIds } = z.object({
         chargeIds: z.array(z.string().uuid()).min(1).max(200),
@@ -172,7 +175,7 @@ export function createChargesRouter(): Router {
   });
 
   // GET /charges/settlement — total amount of confirmed intents pending settlement
-  router.get('/settlement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/settlement', requireAdmin, async (req, res, next) => {
     try {
       const tenantId = req.user!.tenantId!;
       const rows = await db
@@ -192,7 +195,7 @@ export function createChargesRouter(): Router {
   });
 
   // POST /charges/settlement — post Dr 1100 / Cr 1400 for all confirmed intents
-  router.post('/settlement', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/settlement', requireAdmin, async (req, res, next) => {
     try {
       const result = await settlementUC.execute(req.user!.tenantId!, req.user!.uid);
       res.json({ ...result, totalAmount: result.totalAmount.toString() });
@@ -200,7 +203,7 @@ export function createChargesRouter(): Router {
   });
 
   // POST /charges/:id/payment-link — generate Wompi checkout URL
-  router.post('/:id/payment-link', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/:id/payment-link', requireAdmin, async (req, res, next) => {
     try {
       const chargeId = z.string().uuid().parse(req.params['id']);
       const result = await paymentLinkUC.execute({

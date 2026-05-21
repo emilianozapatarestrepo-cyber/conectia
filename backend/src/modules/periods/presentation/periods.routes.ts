@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { withTenantTransaction } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 
 const createPeriodSchema = z.object({
   year:    z.number().int().min(2020).max(2100),
@@ -22,8 +23,10 @@ function lastDayOfMonth(year: number, month: number): Date {
 export function createPeriodsRouter(): Router {
   const router = Router();
 
+  router.use(requireAuth, requireTenant, requireSubscription);
+
   // GET /periods
-  router.get('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.get('/', requireAdmin, async (req, res, next) => {
     try {
       const rows = await withTenantTransaction(req.user!.tenantId!, async (trx) => {
         return trx
@@ -48,7 +51,7 @@ export function createPeriodsRouter(): Router {
   });
 
   // POST /periods
-  router.post('/', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+  router.post('/', requireAdmin, async (req, res, next) => {
     try {
       const { year, month, dueDate } = createPeriodSchema.parse(req.body);
       const tenantId = req.user!.tenantId!;

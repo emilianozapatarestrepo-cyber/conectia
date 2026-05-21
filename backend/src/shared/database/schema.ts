@@ -250,6 +250,37 @@ export interface UnitsTable {
   updatedAt:  Generated<Date>;
 }
 
+// ── SaaS Billing ──────────────────────────────────────────────────────────────
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired';
+
+export interface PlansTable {
+  id:                Generated<string>;
+  code:              string;
+  name:              string;
+  maxUnits:          number | null;
+  monthlyPriceCents: ColumnType<bigint | string, bigint | number | string, bigint | number | string>;
+  features:          ColumnType<Record<string, unknown>, string | undefined, string | undefined>;
+  isActive:          Generated<boolean>;
+  createdAt:         Generated<Date>;
+}
+
+export interface SubscriptionsTable {
+  id:                 Generated<string>;
+  tenantId:           string;
+  planId:             string;
+  status:             SubscriptionStatus;
+  trialEndsAt:        Date | null;
+  currentPeriodStart: ColumnType<Date, Date | string, Date | string>;
+  currentPeriodEnd:   ColumnType<Date, Date | string, Date | string>;
+  cancelledAt:        Date | null;
+  paymentMethod:      string | null;
+  externalRef:        string | null;
+  activatedBy:        string | null;
+  createdAt:          Generated<Date>;
+  updatedAt:          Generated<Date>;
+}
+
 export interface AlertsTable {
   id: Generated<string>;
   tenantId: string;
@@ -285,6 +316,8 @@ export interface DB {
   periods: PeriodsTable;
   alerts: AlertsTable;
   units: UnitsTable;
+  plans: PlansTable;
+  subscriptions: SubscriptionsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -335,3 +368,8 @@ export type PeriodUpdate = Updateable<PeriodsTable>;
 export type Alert = Selectable<AlertsTable>;
 export type NewAlert = Insertable<AlertsTable>;
 export type AlertUpdate = Updateable<AlertsTable>;
+
+export type Plan = Selectable<PlansTable>;
+export type Subscription = Selectable<SubscriptionsTable>;
+export type NewSubscription = Insertable<SubscriptionsTable>;
+export type SubscriptionUpdate = Updateable<SubscriptionsTable>;

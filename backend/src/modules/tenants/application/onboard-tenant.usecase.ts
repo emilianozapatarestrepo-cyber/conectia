@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../../shared/database/db.js';
+import { createTrialSubscription } from '../../billing/application/billing.service.js';
 
 export interface OnboardTenantInput {
   name: string;
@@ -54,7 +55,10 @@ export class OnboardTenantUseCase {
         status: 'active',
       }).execute();
 
-      // 4. Count seeded accounts to confirm
+      // 4. Create 30-day trial subscription (no-op if plans not seeded yet)
+      await createTrialSubscription(tenantId, trx);
+
+      // 5. Count seeded accounts to confirm
       const { count } = await trx
         .selectFrom('chartOfAccounts')
         .select((eb) => eb.fn.countAll<number>().as('count'))

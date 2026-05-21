@@ -17,6 +17,7 @@ import { createTenantsRouter } from './modules/tenants/presentation/tenants.rout
 import { createPeriodsRouter } from './modules/periods/presentation/periods.routes.js';
 import { createPayRouter } from './modules/pay/presentation/pay.routes.js';
 import { createUnitsRouter } from './modules/units/presentation/units.routes.js';
+import { createBillingRouter } from './modules/billing/presentation/billing.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -66,6 +67,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/tenants', createTenantsRouter());
   app.use('/api/v1/periods', createPeriodsRouter());
   app.use('/api/v1/units',   createUnitsRouter());
+  app.use('/api/v1/billing', createBillingRouter());
 
   // ── Public endpoints (no auth) ──
   app.use('/api/v1/pay', createPayRouter());
