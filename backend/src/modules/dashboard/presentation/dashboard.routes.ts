@@ -4,6 +4,7 @@ import { GetSummaryUseCase } from '../application/get-summary.usecase.js';
 import { GetTrendUseCase } from '../application/get-trend.usecase.js';
 import { GetAlertsUseCase } from '../application/get-alerts.usecase.js';
 import { DashboardRepository } from '../infrastructure/dashboard.repository.js';
+import { MarkOverdueUseCase } from '../../charges/application/mark-overdue.usecase.js';
 import {
   requireAuth,
   requireTenant,
@@ -28,6 +29,14 @@ export function createDashboardRouter(): Router {
     try {
       const units = await repo.getDelinquent(req.user!.tenantId!);
       res.json(units.map((u) => ({ ...u, totalOwed: u.totalOwed.toString() })));
+    } catch (err) { next(err); }
+  });
+
+  // POST /dashboard/mark-overdue — promote past-due active charges to overdue status
+  router.post('/mark-overdue', requireAuth, requireTenant, requireAdmin, async (req, res, next) => {
+    try {
+      const result = await new MarkOverdueUseCase().execute(req.user!.tenantId!);
+      res.json({ ...result, totalAmount: result.totalAmount.toString() });
     } catch (err) { next(err); }
   });
 

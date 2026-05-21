@@ -29,6 +29,8 @@ export interface DelinquentUnit {
   unitId: string;
   unitLabel: string;
   ownerName: string | null;
+  phone: string | null;       // from units roster, for WhatsApp notifications
+  chargeIds: string[];         // individual charge IDs for bulk-links
   totalOwed: bigint;
   monthsDelinquent: number;
   lastPaymentDate: Date | null;

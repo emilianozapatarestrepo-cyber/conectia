@@ -75,6 +75,8 @@ export const delinquentUnitSchema = z.object({
   unitId: z.string(),
   unitLabel: z.string(),
   ownerName: z.string().nullable(),
+  phone: z.string().nullable(),
+  chargeIds: z.array(z.string()),
   totalOwed: bigintStr,
   monthsDelinquent: z.number(),
   lastPaymentDate: z.string().nullable().transform((v) => (v ? new Date(v) : null)),
