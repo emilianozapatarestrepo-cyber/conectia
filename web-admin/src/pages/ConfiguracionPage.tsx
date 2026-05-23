@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useBilling, usePlans } from '@/hooks/useBilling';
-import { formatCOP } from '@/lib/formatters';
-import { CheckCircle, Clock, AlertTriangle, Zap, Building2, Shield } from 'lucide-react';
+import { useTenantProfile, useUpdateTenantProfile } from '@/hooks/useTenantProfile';
+import { CheckCircle, Clock, AlertTriangle, Zap, Building2, Shield, Pencil, X, Check } from 'lucide-react';
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -39,6 +40,111 @@ function formatPrice(cents: bigint): string {
   if (cents === 0n) return 'Gratis';
   const pesos = Number(cents) / 100;
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(pesos);
+}
+
+// ── Building profile card ─────────────────────────────────────────────────────
+
+function BuildingProfileCard() {
+  const { data: profile, isLoading } = useTenantProfile();
+  const update = useUpdateTenantProfile();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: '', address: '', taxId: '' });
+
+  function startEdit() {
+    setForm({
+      name:    profile?.name    ?? '',
+      address: profile?.address ?? '',
+      taxId:   profile?.taxId   ?? '',
+    });
+    setEditing(true);
+  }
+
+  async function save() {
+    await update.mutateAsync({
+      name:    form.name    || undefined,
+      address: form.address || null,
+      taxId:   form.taxId   || null,
+    });
+    setEditing(false);
+  }
+
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-slate-400 text-[10px] uppercase tracking-widest">Perfil del conjunto</p>
+        {!editing ? (
+          <button onClick={startEdit}
+            className="flex items-center gap-1 text-slate-400 hover:text-white text-[11px] transition-colors">
+            <Pencil size={11} /> Editar
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setEditing(false)}
+              className="flex items-center gap-1 text-slate-400 hover:text-white text-[11px]">
+              <X size={11} /> Cancelar
+            </button>
+            <button onClick={save} disabled={update.isPending}
+              className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 text-[11px] font-semibold">
+              <Check size={11} /> {update.isPending ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-8 bg-surface-hover rounded animate-pulse" />
+          ))}
+        </div>
+      ) : editing ? (
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1">Nombre del conjunto</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full bg-surface-hover border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-primary/50"
+              placeholder="Torres del Parque"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1">Dirección</label>
+            <input
+              value={form.address}
+              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+              className="w-full bg-surface-hover border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-primary/50"
+              placeholder="Cra 15 #93-40, Bogotá"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1">NIT</label>
+            <input
+              value={form.taxId}
+              onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value }))}
+              className="w-full bg-surface-hover border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-primary/50"
+              placeholder="900.123.456-7"
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-surface-hover rounded-lg px-3 py-2.5">
+            <p className="text-[10px] text-slate-400 mb-0.5">Nombre</p>
+            <p className="text-white font-semibold text-sm truncate">{profile?.name ?? '—'}</p>
+          </div>
+          <div className="bg-surface-hover rounded-lg px-3 py-2.5">
+            <p className="text-[10px] text-slate-400 mb-0.5">Dirección</p>
+            <p className="text-white text-sm truncate">{profile?.address ?? '—'}</p>
+          </div>
+          <div className="bg-surface-hover rounded-lg px-3 py-2.5">
+            <p className="text-[10px] text-slate-400 mb-0.5">NIT</p>
+            <p className="text-white text-sm">{profile?.taxId ?? '—'}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -126,6 +232,9 @@ export default function ConfiguracionPage() {
           </div>
         )}
       </div>
+
+      {/* Building profile */}
+      <BuildingProfileCard />
 
       {/* Trial warning */}
       {billing?.isTrialing && (billing.daysRemaining ?? 30) <= 7 && (

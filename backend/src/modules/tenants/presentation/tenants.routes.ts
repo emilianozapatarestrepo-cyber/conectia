@@ -1,8 +1,10 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { env } from '../../../config/env.js';
-import { requireAuth } from '../../../shared/middlewares/auth.js';
+import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
+import { requireSubscription } from '../../billing/application/require-subscription.js';
 import { OnboardTenantUseCase } from '../application/onboard-tenant.usecase.js';
+import { db } from '../../../shared/database/db.js';
 
 const onboardSchema = z.object({
   name: z.string().min(2).max(200),
@@ -40,6 +42,43 @@ export function createTenantsRouter(): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  // GET /api/v1/tenants/profile — building profile for authenticated admin
+  router.get('/profile', requireAuth, requireTenant, requireSubscription, requireAdmin, async (req, res, next) => {
+    try {
+      const tenant = await db
+        .selectFrom('tenants')
+        .select(['id', 'name', 'type', 'address', 'taxId', 'timezone', 'currency'])
+        .where('id', '=', req.user!.tenantId!)
+        .executeTakeFirstOrThrow();
+      res.json(tenant);
+    } catch (err) { next(err); }
+  });
+
+  const updateProfileSchema = z.object({
+    name:     z.string().min(2).max(200).optional(),
+    type:     z.enum(['conjunto_residencial', 'edificio', 'oficinas', 'parqueadero', 'otro']).optional(),
+    address:  z.string().max(500).nullable().optional(),
+    taxId:    z.string().max(20).nullable().optional(),
+    timezone: z.string().optional(),
+  });
+
+  // PATCH /api/v1/tenants/profile — update building profile
+  router.patch('/profile', requireAuth, requireTenant, requireSubscription, requireAdmin, async (req, res, next) => {
+    try {
+      const updates = updateProfileSchema.parse(req.body);
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ error: 'No fields to update' });
+        return;
+      }
+      await db
+        .updateTable('tenants')
+        .set({ ...updates, updatedAt: new Date() })
+        .where('id', '=', req.user!.tenantId!)
+        .execute();
+      res.json({ success: true });
+    } catch (err) { next(err); }
   });
 
   return router;

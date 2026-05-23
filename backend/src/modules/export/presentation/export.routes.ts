@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
 import { requireSubscription } from '../../billing/application/require-subscription.js';
 import { ChargesRepository } from '../../charges/infrastructure/charges.repository.js';
+import { db } from '../../../shared/database/db.js';
 import { generateStatementPDF } from '../infrastructure/pdf.generator.js';
 import { generatePortfolioExcel } from '../infrastructure/excel.generator.js';
 
@@ -20,7 +21,11 @@ export function createExportRouter(): Router {
         period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       }).parse(req.query);
 
-      const charges = await chargesRepo.list(req.user!.tenantId!, { unitId, period });
+      const tenantId = req.user!.tenantId!;
+      const [charges, tenant] = await Promise.all([
+        chargesRepo.list(tenantId, { unitId, period }),
+        db.selectFrom('tenants').select('name').where('id', '=', tenantId).executeTakeFirst(),
+      ]);
 
       if (charges.length === 0) {
         res.status(404).json({ error: 'No charges found for this unit in the requested period' });
@@ -31,7 +36,7 @@ export function createExportRouter(): Router {
         .filter((c) => c.status !== 'paid')
         .reduce((s, c) => s + c.amount, 0n);
 
-      const buildingName = 'Conjunto Residencial'; // TODO: fetch from tenant profile
+      const buildingName = tenant?.name ?? 'Conjunto Residencial';
       const pdfBuffer = await generateStatementPDF({
         buildingName,
         period,
@@ -64,8 +69,12 @@ export function createExportRouter(): Router {
         period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       }).parse(req.query);
 
-      const delinquent = await chargesRepo.getDelinquent(req.user!.tenantId!);
-      const buildingName = 'Conjunto Residencial'; // TODO: fetch from tenant profile
+      const tenantId = req.user!.tenantId!;
+      const [delinquent, tenant] = await Promise.all([
+        chargesRepo.getDelinquent(tenantId),
+        db.selectFrom('tenants').select('name').where('id', '=', tenantId).executeTakeFirst(),
+      ]);
+      const buildingName = tenant?.name ?? 'Conjunto Residencial';
 
       const excelBuffer = await generatePortfolioExcel(
         buildingName,

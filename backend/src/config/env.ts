@@ -24,6 +24,9 @@ const envSchema = z.object({
   // Platform (Conectia internal — not exposed to buildings)
   PLATFORM_API_KEY: z.string().min(32).optional(),
 
+  // Cron secret — guards the /cron/* endpoints from unauthorized triggers
+  CRON_SECRET: z.string().min(16).optional(),
+
   // Public app URL (used in redirect URLs sent to residents)
   APP_URL: z.string().url().optional(),
 
