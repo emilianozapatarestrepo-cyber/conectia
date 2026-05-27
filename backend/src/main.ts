@@ -50,8 +50,29 @@ async function bootstrap(): Promise<void> {
     message: { error: 'Export rate limit exceeded, please wait before requesting another export' },
   });
 
+  // Webhook flood protection — Wompi sends up to 3 retries; 60/min is generous
+  const webhookLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.ip ?? 'unknown',
+    message: { error: 'Webhook rate limit exceeded' },
+  });
+
+  // Cron protection — extra layer on top of secret validation
+  const cronLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Cron rate limit exceeded' },
+  });
+
   app.use('/api/v1/', apiLimiter);
   app.use('/api/v1/export', exportLimiter);
+  app.use('/webhooks', webhookLimiter);
+  app.use('/cron', cronLimiter);
 
   // ── Health Check ──
   app.get('/health', (_req, res) => {

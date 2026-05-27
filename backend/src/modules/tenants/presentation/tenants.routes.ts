@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { env } from '../../../config/env.js';
@@ -15,13 +16,33 @@ const onboardSchema = z.object({
   timezone: z.string().default('America/Bogota'),
 });
 
-function requirePlatformKey(req: Request, res: Response, next: NextFunction): void {
-  const key = req.headers['x-platform-key'];
-  const expected = env.PLATFORM_API_KEY;
-  if (!expected || key !== expected) {
+export function requirePlatformKey(req: Request, res: Response, next: NextFunction): void {
+  const provided = req.headers['x-platform-key'];
+
+  // Reject multi-value headers (Express allows string | string[])
+  if (typeof provided !== 'string') {
     res.status(403).json({ error: 'Platform API key required' });
     return;
   }
+
+  try {
+    const expectedBuf = Buffer.from(env.PLATFORM_API_KEY);
+    const providedBuf = Buffer.from(provided);
+    const paddedProvided = Buffer.alloc(expectedBuf.length);
+    providedBuf.copy(paddedProvided, 0, 0, Math.min(providedBuf.length, expectedBuf.length));
+
+    const match = expectedBuf.length === providedBuf.length &&
+      timingSafeEqual(expectedBuf, paddedProvided);
+
+    if (!match) {
+      res.status(403).json({ error: 'Invalid platform API key' });
+      return;
+    }
+  } catch {
+    res.status(403).json({ error: 'Invalid platform API key' });
+    return;
+  }
+
   next();
 }
 

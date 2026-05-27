@@ -24,19 +24,20 @@ export function createWebhookRouter(): Router {
         return;
       }
 
-      const secret = env.WOMPI_EVENTS_SECRET ?? '';
-      const signatureValid = secret
-        ? reconcileUC.verifySignature(event, secret)
-        : false;
+      // Verify HMAC-SHA256 signature in ALL environments — no NODE_ENV bypass
+      const signatureValid = reconcileUC.verifySignature(event, env.WOMPI_EVENTS_SECRET);
 
-      if (!signatureValid && env.NODE_ENV === 'production') {
-        log.warn({ txId: event.data.transaction.id }, 'Wompi signature invalid in production');
-        // Still return 200 to Wompi — don't expose rejection reason
+      if (!signatureValid) {
+        // Return 200 to prevent Wompi retry flood; event silently discarded
+        log.warn(
+          { txId: event.data.transaction.id },
+          '[SECURITY] Wompi signature invalid — event discarded',
+        );
         res.json({ received: true });
         return;
       }
 
-      const result = await reconcileUC.execute(event, signatureValid);
+      const result = await reconcileUC.execute(event, true);
 
       log.info({ outcome: result.outcome, txId: event.data.transaction.id }, 'Webhook processed');
 

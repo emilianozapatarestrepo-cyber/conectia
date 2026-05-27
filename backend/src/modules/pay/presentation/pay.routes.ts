@@ -68,14 +68,12 @@ export function createPayRouter(): Router {
       // Build Wompi URL (only if not yet paid)
       let wompiUrl: string | null = null;
       if (intent.status === 'pending') {
-        const integritySecret = env.WOMPI_INTEGRITY_SECRET ?? '';
-        const publicKey       = env.WOMPI_PUBLIC_KEY ?? '';
-        const integrityHash   = createHash('sha256')
-          .update(`${reference}${amount}${intent.currency}${integritySecret}`)
+        const integrityHash = createHash('sha256')
+          .update(`${reference}${amount}${intent.currency}${env.WOMPI_INTEGRITY_SECRET}`)
           .digest('hex');
 
         const params = new URLSearchParams({
-          'public-key':        publicKey,
+          'public-key':        env.WOMPI_PUBLIC_KEY,
           currency:            intent.currency,
           'amount-in-cents':   amount.toString(),
           reference,

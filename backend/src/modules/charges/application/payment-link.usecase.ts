@@ -130,11 +130,11 @@ function buildWompiUrl(opts: {
   appUrl:       string;
 }): string {
   const integrityHash = createHash('sha256')
-    .update(`${opts.reference}${opts.amountCents}${opts.currency}${env.WOMPI_INTEGRITY_SECRET ?? ''}`)
+    .update(`${opts.reference}${opts.amountCents}${opts.currency}${env.WOMPI_INTEGRITY_SECRET}`)
     .digest('hex');
 
   const params = new URLSearchParams({
-    'public-key':          env.WOMPI_PUBLIC_KEY ?? '',
+    'public-key':          env.WOMPI_PUBLIC_KEY,
     currency:              opts.currency,
     'amount-in-cents':     opts.amountCents.toString(),
     reference:             opts.reference,

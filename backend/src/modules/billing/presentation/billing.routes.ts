@@ -1,18 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
+import { requirePlatformKey } from '../../tenants/presentation/tenants.routes.js';
 import { getSubscription, activatePlan } from '../application/billing.service.js';
-import { env } from '../../../config/env.js';
-
-const PLATFORM_KEY = env.PLATFORM_API_KEY ?? '';
-
-function requirePlatformKey(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) {
-  if (req.headers['x-platform-key'] !== PLATFORM_KEY || !PLATFORM_KEY) {
-    res.status(403).json({ error: 'Forbidden' });
-    return;
-  }
-  next();
-}
 
 export function createBillingRouter(): Router {
   const router = Router();
