@@ -114,7 +114,11 @@ export function createChargesRouter(): Router {
       });
 
       const status = result.failed === 0 ? 201 : result.created === 0 ? 422 : 207;
-      res.status(status).json(result);
+      res.status(status).json({
+        created: result.created,
+        failed:  result.failed,
+        total:   result.created + result.failed,
+      });
     } catch (err) { next(err); }
   });
 

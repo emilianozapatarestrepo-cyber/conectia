@@ -1,142 +1,173 @@
 import { useState } from 'react';
-import { Zap, Plus, MessageCircle, Copy, Check, ExternalLink, ChevronDown } from 'lucide-react';
-import { useCharges, usePaymentLink } from '@/hooks/useCharges';
+import {
+  Zap, Plus, TrendingUp, Clock, AlertTriangle, ChevronDown,
+} from 'lucide-react';
+import { useCharges } from '@/hooks/useCharges';
+import { useUnits } from '@/hooks/useUnits';
 import { usePeriods } from '@/hooks/usePeriods';
-import { DataTable, type Column } from '@/components/ui/DataTable';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { formatCOP, formatDate } from '@/lib/formatters';
+import { formatCOP } from '@/lib/formatters';
+import { ChargesTable } from '@/components/charges/ChargesTable';
 import { CobrarMesModal } from '@/components/charges/CobrarMesModal';
 import { CreateChargeModal } from '@/components/charges/CreateChargeModal';
-import type { Charge } from '@/lib/schemas';
+import { clsx } from 'clsx';
 
-type FilterStatus = 'all' | 'paid' | 'pending' | 'overdue';
+type FilterStatus = 'all' | 'pending' | 'overdue' | 'paid';
 
-const FILTER_OPTIONS: { value: FilterStatus; label: string }[] = [
+const STATUS_TABS: { value: FilterStatus; label: string }[] = [
   { value: 'all',     label: 'Todos' },
   { value: 'pending', label: 'Pendientes' },
   { value: 'overdue', label: 'En mora' },
   { value: 'paid',    label: 'Pagados' },
 ];
 
-function buildWhatsAppUrl(phone: string, ownerName: string | null, unitLabel: string, amount: bigint, concept: string, dueDate: Date) {
-  const name = ownerName ?? 'Estimado residente';
-  const due  = formatDate(dueDate);
-  const msg  = `Hola ${name}, le recordamos que tiene un cobro pendiente en ${unitLabel}:\n\n*${concept}*\nMonto: *${formatCOP(amount)}*\nVencimiento: ${due}\n\nPor favor realice su pago a la brevedad. Gracias.`;
-  return `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+// ─── KPI Card ────────────────────────────────────────────────────────────────
+
+interface KpiCardProps {
+  label:    string;
+  amount:   bigint;
+  count:    number;
+  total?:   number;
+  subtitle: string;
+  color:    'emerald' | 'amber' | 'red';
+  icon:     React.ReactNode;
+  progress?: number; // 0-100
 }
 
-function PaymentLinkButton({ charge }: { charge: Charge }) {
-  const paymentLink = usePaymentLink();
-  const [copied, setCopied]   = useState(false);
-  const [url,    setUrl]      = useState<string | null>(null);
-
-  async function handleClick() {
-    if (url) {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      return;
-    }
-    const res = await paymentLink.mutateAsync(charge.id);
-    setUrl(res.checkoutUrl);
-    await navigator.clipboard.writeText(res.checkoutUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
+function KpiCard({ label, amount, count, subtitle, color, icon, progress }: KpiCardProps) {
+  const colorMap = {
+    emerald: {
+      icon:   'bg-emerald-500/15 text-emerald-400',
+      amount: 'text-white',
+      count:  'text-emerald-400',
+      bar:    'bg-emerald-500',
+      accent: 'via-emerald-500/25',
+    },
+    amber: {
+      icon:   'bg-amber-500/15 text-amber-400',
+      amount: count > 0 ? 'text-amber-300' : 'text-white',
+      count:  'text-amber-400',
+      bar:    'bg-amber-500',
+      accent: 'via-amber-500/20',
+    },
+    red: {
+      icon:   'bg-red-500/15 text-red-400',
+      amount: count > 0 ? 'text-red-300' : 'text-white',
+      count:  'text-red-400',
+      bar:    'bg-red-500',
+      accent: 'via-red-500/20',
+    },
+  }[color];
 
   return (
-    <button
-      onClick={() => void handleClick()}
-      disabled={paymentLink.isPending}
-      title={url ? 'Copiar enlace de pago' : 'Generar enlace de pago'}
-      className="p-1.5 rounded-md text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
-    >
-      {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-    </button>
+    <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-surface-card p-5">
+      {/* Top gradient accent line */}
+      <div className={clsx('absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent', colorMap.accent)} />
+
+      <div className="flex items-start justify-between mb-4">
+        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">{label}</p>
+        <div className={clsx('w-7 h-7 rounded-lg flex items-center justify-center', colorMap.icon)}>
+          {icon}
+        </div>
+      </div>
+
+      <p className={clsx('text-2xl font-bold tabular-nums tracking-tight', colorMap.amount)}>
+        {formatCOP(amount)}
+      </p>
+
+      {progress !== undefined ? (
+        <div className="mt-3.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-slate-400">{subtitle}</span>
+            <span className={clsx('text-[11px] font-bold tabular-nums', colorMap.count)}>
+              {Math.round(progress)}%
+            </span>
+          </div>
+          <div className="h-1.5 bg-surface-hover rounded-full overflow-hidden">
+            <div
+              className={clsx('h-full rounded-full transition-all duration-700', colorMap.bar)}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3.5 flex items-center justify-between">
+          <span className="text-[11px] text-slate-400">{subtitle}</span>
+          <span className={clsx('text-[12px] font-semibold tabular-nums', count > 0 ? colorMap.count : 'text-slate-500')}>
+            {count === 0 ? 'Ninguna' : `${count} ${count === 1 ? 'unidad' : 'unidades'}`}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
-export default function RecaudoPage() {
-  const { data: periods = [] } = usePeriods();
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
-  const [filterPeriod, setFilterPeriod] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+export default function RecaudoPage() {
+  const { data: periods = [] }              = usePeriods();
+  const { data: units   = [], isLoading: unitsLoading } = useUnits();
+
+  const [filterPeriod,     setFilterPeriod]     = useState('');
+  const [filterStatus,     setFilterStatus]     = useState<FilterStatus>('all');
   const [showCobrarMes,    setShowCobrarMes]    = useState(false);
   const [showCreateCharge, setShowCreateCharge] = useState(false);
 
-  const { data = [], isLoading } = useCharges({
-    period: filterPeriod || undefined,
+  const periodParam = filterPeriod || undefined;
+
+  // Full set (for KPIs — always unfiltered by status)
+  const { data: allCharges = [] } = useCharges({ period: periodParam });
+
+  // Filtered set (for table)
+  const { data: tableData = [], isLoading: tableLoading } = useCharges({
+    period: periodParam,
     status: filterStatus === 'all' ? undefined : filterStatus,
   });
 
-  const pendingCount = data.filter((c) => c.status === 'active' || c.status === 'overdue').length;
-  const totalAmount  = data.reduce((s, c) => s + c.amount, 0n);
-  const paidAmount   = data.filter((c) => c.status === 'paid').reduce((s, c) => s + c.amount, 0n);
+  // ── KPI calculations ──────────────────────────────────────────────────────
+  const paidCharges    = allCharges.filter((c) => c.status === 'paid');
+  const overdueCharges = allCharges.filter((c) => c.status === 'overdue');
+  const pendingCharges = allCharges.filter((c) => c.status === 'active');
 
-  const COLUMNS: Column<Charge>[] = [
-    {
-      key: 'unit',
-      header: 'Unidad',
-      render: (r) => (
-        <div>
-          <p className="font-medium text-white">{r.unitLabel}</p>
-          {r.ownerName && <p className="text-[11px] text-slate-400">{r.ownerName}</p>}
-        </div>
-      ),
-    },
-    { key: 'concept', header: 'Concepto',    render: (r) => <span className="text-slate-300 text-[12px]">{r.concept}</span> },
-    { key: 'due',     header: 'Vencimiento', render: (r) => <span className="text-slate-400 text-[12px] tabular-nums">{formatDate(r.dueDate)}</span> },
-    { key: 'amount',  header: 'Monto',       render: (r) => <span className="tabular-nums font-medium">{formatCOP(r.amount)}</span>, align: 'right' },
-    { key: 'status',  header: 'Estado',      render: (r) => <StatusBadge status={r.status} />, align: 'center' },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (r) => {
-        const actionable = r.status === 'active' || r.status === 'overdue';
-        if (!actionable) return null;
-        return (
-          <div className="flex items-center gap-0.5 justify-end">
-            <PaymentLinkButton charge={r} />
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {(r as any).phone && (
-              <a
-                href={buildWhatsAppUrl((r as any).phone, r.ownerName, r.unitLabel, r.amount, r.concept, r.dueDate)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Notificar por WhatsApp"
-                className="p-1.5 rounded-md text-slate-400 hover:text-green-400 hover:bg-green-500/10 transition-colors"
-              >
-                <MessageCircle size={13} />
-              </a>
-            )}
-          </div>
-        );
-      },
-    },
-  ];
+  const paidAmount    = paidCharges.reduce((s, c) => s + c.amount, 0n);
+  const overdueAmount = overdueCharges.reduce((s, c) => s + c.amount, 0n);
+  const pendingAmount = pendingCharges.reduce((s, c) => s + c.amount, 0n);
+  const totalAmount   = allCharges.reduce((s, c) => s + c.amount, 0n);
+  const collectedPct  = totalAmount > 0n
+    ? Math.min(100, Number((paidAmount * 10000n) / totalAmount) / 100)
+    : 0;
 
+  const paidSubtitle = allCharges.length > 0
+    ? `${paidCharges.length} de ${allCharges.length} unidades`
+    : 'Sin cobros en este período';
+
+  // ── Callbacks ─────────────────────────────────────────────────────────────
   function handleCobrarMesSuccess(ym: string) {
     setShowCobrarMes(false);
     if (ym) setFilterPeriod(ym);
   }
 
+  const isTableLoading = tableLoading || unitsLoading;
+
   return (
-    <div className="p-5 space-y-4">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-white font-bold text-base">Recaudo</h1>
-        <div className="flex gap-2">
+    <div className="p-5 space-y-5">
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-white font-bold text-[15px] tracking-tight">Recaudo</h1>
+          <p className="text-slate-400 text-[12px] mt-0.5">Cobros, estados de pago y enlace Wompi</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowCreateCharge(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-card border border-surface-border text-slate-300 hover:text-white text-[12px] font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-border bg-surface-card text-slate-300 hover:text-white hover:border-slate-500 text-[12px] font-medium transition-all"
           >
             <Plus size={13} />
             Nuevo cargo
           </button>
           <button
             onClick={() => setShowCobrarMes(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-primary hover:bg-brand-primary/90 text-white text-[12px] font-semibold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[12px] font-semibold transition-all shadow-lg shadow-blue-500/20"
           >
             <Zap size={13} />
             Cobrar mes
@@ -144,14 +175,43 @@ export default function RecaudoPage() {
         </div>
       </div>
 
-      {/* Filters row */}
+      {/* ── KPI Cards ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-4">
+        <KpiCard
+          label="Recaudado"
+          amount={paidAmount}
+          count={paidCharges.length}
+          subtitle={paidSubtitle}
+          color="emerald"
+          icon={<TrendingUp size={14} />}
+          progress={collectedPct}
+        />
+        <KpiCard
+          label="Pendiente"
+          amount={pendingAmount}
+          count={pendingCharges.length}
+          subtitle="Por cobrar"
+          color="amber"
+          icon={<Clock size={14} />}
+        />
+        <KpiCard
+          label="En mora"
+          amount={overdueAmount}
+          count={overdueCharges.length}
+          subtitle={overdueCharges.length > 0 ? 'Requiere atención' : 'Al día'}
+          color="red"
+          icon={<AlertTriangle size={14} />}
+        />
+      </div>
+
+      {/* ── Filters ────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Period filter */}
+        {/* Period */}
         <div className="relative">
           <select
             value={filterPeriod}
             onChange={(e) => setFilterPeriod(e.target.value)}
-            className="appearance-none bg-surface-card border border-surface-border text-sm text-white rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-primary cursor-pointer"
+            className="appearance-none bg-surface-card border border-surface-border text-[12px] text-white rounded-xl pl-3.5 pr-8 py-2 focus:outline-none focus:ring-1 focus:ring-brand-primary/50 cursor-pointer hover:border-slate-500 transition-colors"
           >
             <option value="">Todos los períodos</option>
             {periods.map((p) => (
@@ -164,69 +224,45 @@ export default function RecaudoPage() {
         </div>
 
         {/* Status tabs */}
-        <div className="flex gap-1">
-          {FILTER_OPTIONS.map(({ value, label }) => (
+        <div className="flex gap-1 p-1 bg-surface-card border border-surface-border rounded-xl">
+          {STATUS_TABS.map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setFilterStatus(value)}
-              className={`px-3 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${
+              className={clsx(
+                'px-3 py-1 rounded-lg text-[11px] font-semibold transition-all',
                 filterStatus === value
-                  ? 'bg-brand-primary text-white'
-                  : 'bg-surface-card text-slate-400 hover:text-white'
-              }`}
+                  ? 'bg-brand-primary text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200',
+              )}
             >
               {label}
             </button>
           ))}
         </div>
+
+        {/* Record count */}
+        {!tableLoading && (
+          <span className="text-[11px] text-slate-500 ml-auto">
+            {tableData.length} {tableData.length === 1 ? 'registro' : 'registros'}
+          </span>
+        )}
       </div>
 
-      {/* Summary bar */}
-      <div className="bg-surface-card border border-surface-border rounded-xl px-4 py-3 grid grid-cols-3 gap-4">
-        <div>
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider">Total cobrado</p>
-          <p className="text-white font-bold tabular-nums mt-0.5">{formatCOP(paidAmount)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider">Total pendiente</p>
-          <p className="text-amber-400 font-bold tabular-nums mt-0.5">
-            {formatCOP(data.filter((c) => c.status !== 'paid').reduce((s, c) => s + c.amount, 0n))}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider">Registros</p>
-          <p className="text-white font-bold tabular-nums mt-0.5">
-            {data.length}
-            {pendingCount > 0 && (
-              <span className="text-[11px] text-amber-400 font-normal ml-1.5">({pendingCount} sin pagar)</span>
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* Bulk notify hint */}
-      {filterStatus !== 'paid' && pendingCount > 0 && (
-        <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-surface-card border border-surface-border rounded-lg px-3 py-2">
-          <ExternalLink size={11} />
-          Usa los botones <Copy size={10} className="inline" /> y <MessageCircle size={10} className="inline" /> en cada fila para generar enlace de pago o notificar por WhatsApp.
-        </div>
-      )}
-
-      <DataTable
-        columns={COLUMNS}
-        data={data}
-        keyFn={(r) => r.id}
-        loading={isLoading}
-        emptyMessage="No hay cobros para los filtros seleccionados"
+      {/* ── Table ──────────────────────────────────────────────────────── */}
+      <ChargesTable
+        charges={tableData}
+        units={units}
+        loading={isTableLoading}
       />
 
+      {/* ── Modals ─────────────────────────────────────────────────────── */}
       {showCobrarMes && (
         <CobrarMesModal
           onClose={() => setShowCobrarMes(false)}
           onSuccess={handleCobrarMesSuccess}
         />
       )}
-
       {showCreateCharge && (
         <CreateChargeModal
           onClose={() => setShowCreateCharge(false)}
