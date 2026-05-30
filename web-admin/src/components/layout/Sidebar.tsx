@@ -1,17 +1,22 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw, Presentation, Settings, Building2 } from 'lucide-react';
+import { BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw, Presentation, Settings, Building2, MessageSquare } from 'lucide-react';
 import { clsx } from 'clsx';
+import { usePqrsStats } from '@/hooks/usePqrs';
 
 const NAV_ITEMS = [
-  { to: '/',             icon: BarChart2,     label: 'Resumen' },
-  { to: '/recaudo',      icon: DollarSign,    label: 'Recaudo' },
-  { to: '/cartera',      icon: FileText,      label: 'Cartera' },
-  { to: '/morosidad',    icon: AlertTriangle, label: 'Morosidad' },
-  { to: '/conciliacion', icon: RefreshCw,     label: 'Conciliación' },
-  { to: '/unidades',     icon: Building2,     label: 'Unidades' },
+  { to: '/',             icon: BarChart2,      label: 'Resumen' },
+  { to: '/recaudo',      icon: DollarSign,     label: 'Recaudo' },
+  { to: '/cartera',      icon: FileText,       label: 'Cartera' },
+  { to: '/morosidad',    icon: AlertTriangle,  label: 'Morosidad' },
+  { to: '/conciliacion', icon: RefreshCw,      label: 'Conciliación' },
+  { to: '/unidades',     icon: Building2,      label: 'Unidades' },
+  { to: '/pqrs',         icon: MessageSquare,  label: 'PQRS' },
 ] as const;
 
 export function Sidebar() {
+  const { data: pqrsStats } = usePqrsStats();
+  const openPqrs = (pqrsStats?.abierta ?? 0) + (pqrsStats?.en_proceso ?? 0);
+
   return (
     <aside className="w-[160px] flex-shrink-0 bg-[#0a0f1e] border-r border-surface-border flex flex-col h-screen sticky top-0">
       {/* Logo */}
@@ -36,7 +41,12 @@ export function Sidebar() {
             }
           >
             <Icon size={15} strokeWidth={1.8} />
-            <span>{label}</span>
+            <span className="flex-1">{label}</span>
+            {to === '/pqrs' && openPqrs > 0 && (
+              <span className="ml-1 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                {openPqrs > 9 ? '9+' : openPqrs}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

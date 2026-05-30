@@ -14,6 +14,7 @@ const LoginPage        = lazy(() => import('@/pages/LoginPage'));
 const PayPage          = lazy(() => import('@/pages/PayPage'));
 const UnitsPage           = lazy(() => import('@/pages/UnitsPage'));
 const ConfiguracionPage   = lazy(() => import('@/pages/ConfiguracionPage'));
+const PqrsPage            = lazy(() => import('@/pages/PqrsPage'));
 
 const Suspensed = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
         { path: 'asamblea',        element: <Suspensed><AsambleaPage /></Suspensed> },
         { path: 'unidades',        element: <Suspensed><UnitsPage /></Suspensed> },
         { path: 'configuracion',   element: <Suspensed><ConfiguracionPage /></Suspensed> },
+        { path: 'pqrs',            element: <Suspensed><PqrsPage /></Suspensed> },
       ],
     }],
   },

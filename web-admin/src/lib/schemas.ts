@@ -89,3 +89,37 @@ export type TrendPoint = z.infer<typeof trendPointSchema>;
 export type Alert = z.infer<typeof alertSchema>;
 export type Charge = z.infer<typeof chargeSchema>;
 export type DelinquentUnit = z.infer<typeof delinquentUnitSchema>;
+
+// ── PQRS ──────────────────────────────────────────────────────────────────────
+
+export const pqrsSchema = z.object({
+  id:               z.string(),
+  unitId:           z.string().nullable(),
+  unitLabel:        z.string().nullable(),
+  category:         z.enum(['peticion', 'queja', 'reclamo', 'sugerencia']),
+  subject:          z.string(),
+  description:      z.string(),
+  status:           z.enum(['abierta', 'en_proceso', 'respondida', 'cerrada']),
+  priority:         z.enum(['baja', 'media', 'alta']),
+  submittedBy:      z.string(),
+  submittedByPhone: z.string().nullable(),
+  submitterType:    z.enum(['residente', 'administrador', 'visitante']),
+  adminResponse:    z.string().nullable(),
+  respondedAt:      z.string().nullable().transform((v) => (v ? new Date(v) : null)),
+  respondedBy:      z.string().nullable(),
+  dueDate:          z.string().transform((v) => new Date(v)),
+  createdAt:        z.string().transform((v) => new Date(v)),
+  updatedAt:        z.string().transform((v) => new Date(v)),
+});
+
+export const pqrsStatsSchema = z.object({
+  abierta:    z.number(),
+  en_proceso: z.number(),
+  respondida: z.number(),
+  cerrada:    z.number(),
+  total:      z.number(),
+  overdue:    z.number(),
+});
+
+export type PqrsItem = z.infer<typeof pqrsSchema>;
+export type PqrsStats = z.infer<typeof pqrsStatsSchema>;

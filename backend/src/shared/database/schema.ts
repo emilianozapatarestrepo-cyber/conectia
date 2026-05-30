@@ -298,6 +298,34 @@ export interface AlertsTable {
   expiresAt: Date | null;
 }
 
+// ── PQRS ──────────────────────────────────────────────────────────────────────
+
+export type PqrsCategory = 'peticion' | 'queja' | 'reclamo' | 'sugerencia';
+export type PqrsStatus = 'abierta' | 'en_proceso' | 'respondida' | 'cerrada';
+export type PqrsPriority = 'baja' | 'media' | 'alta';
+export type PqrsSubmitterType = 'residente' | 'administrador' | 'visitante';
+
+export interface PqrsTable {
+  id: Generated<string>;
+  tenantId: string;
+  unitId: string | null;
+  unitLabel: string | null;
+  category: PqrsCategory;
+  subject: string;
+  description: string;
+  status: PqrsStatus;
+  priority: PqrsPriority;
+  submittedBy: string;
+  submittedByPhone: string | null;
+  submitterType: PqrsSubmitterType;
+  adminResponse: string | null;
+  respondedAt: Date | null;
+  respondedBy: string | null;
+  dueDate: ColumnType<Date, Date | string | undefined, Date | string>;
+  createdAt: Generated<Date>;
+  updatedAt: Generated<Date>;
+}
+
 // ─── Database Interface (Kysely root) ────────────────────────────────────────
 
 export interface DB {
@@ -318,6 +346,7 @@ export interface DB {
   units: UnitsTable;
   plans: PlansTable;
   subscriptions: SubscriptionsTable;
+  pqrs: PqrsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -373,3 +402,7 @@ export type Plan = Selectable<PlansTable>;
 export type Subscription = Selectable<SubscriptionsTable>;
 export type NewSubscription = Insertable<SubscriptionsTable>;
 export type SubscriptionUpdate = Updateable<SubscriptionsTable>;
+
+export type Pqrs = Selectable<PqrsTable>;
+export type NewPqrs = Insertable<PqrsTable>;
+export type PqrsUpdate = Updateable<PqrsTable>;
