@@ -36,32 +36,38 @@ interface KpiCardProps {
 function KpiCard({ label, amount, count, subtitle, color, icon, progress }: KpiCardProps) {
   const colorMap = {
     emerald: {
-      icon:   'bg-emerald-500/15 text-emerald-400',
-      amount: 'text-white',
-      count:  'text-emerald-400',
-      bar:    'bg-emerald-500',
-      accent: 'via-emerald-500/25',
+      icon:      'bg-emerald-500/15 text-emerald-400',
+      border:    'border-emerald-500/20',
+      amount:    'text-white',
+      count:     'text-emerald-400',
+      bar:       'bg-emerald-500',
+      glowColor: 'rgba(16,185,129,0.15)',
     },
     amber: {
-      icon:   'bg-amber-500/15 text-amber-400',
-      amount: count > 0 ? 'text-amber-300' : 'text-white',
-      count:  'text-amber-400',
-      bar:    'bg-amber-500',
-      accent: 'via-amber-500/20',
+      icon:      'bg-amber-500/15 text-amber-400',
+      border:    count > 0 ? 'border-amber-500/20' : 'border-surface-border',
+      amount:    count > 0 ? 'text-amber-300' : 'text-white',
+      count:     'text-amber-400',
+      bar:       'bg-amber-500',
+      glowColor: count > 0 ? 'rgba(245,158,11,0.12)' : 'transparent',
     },
     red: {
-      icon:   'bg-red-500/15 text-red-400',
-      amount: count > 0 ? 'text-red-300' : 'text-white',
-      count:  'text-red-400',
-      bar:    'bg-red-500',
-      accent: 'via-red-500/20',
+      icon:      'bg-red-500/15 text-red-400',
+      border:    count > 0 ? 'border-red-500/20' : 'border-surface-border',
+      amount:    count > 0 ? 'text-red-300' : 'text-white',
+      count:     'text-red-400',
+      bar:       'bg-red-500',
+      glowColor: count > 0 ? 'rgba(239,68,68,0.12)' : 'transparent',
     },
   }[color];
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-surface-border bg-surface-card p-5">
-      {/* Top gradient accent line */}
-      <div className={clsx('absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent', colorMap.accent)} />
+    <div className={clsx('relative overflow-hidden rounded-2xl border bg-surface-card p-5', colorMap.border)}>
+      {/* Subtle corner glow using inline gradient */}
+      <div
+        className="absolute -top-10 -left-10 w-28 h-28 rounded-full opacity-50 blur-2xl"
+        style={{ background: colorMap.glowColor }}
+      />
 
       <div className="flex items-start justify-between mb-4">
         <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">{label}</p>
@@ -70,7 +76,7 @@ function KpiCard({ label, amount, count, subtitle, color, icon, progress }: KpiC
         </div>
       </div>
 
-      <p className={clsx('text-2xl font-bold tabular-nums tracking-tight', colorMap.amount)}>
+      <p className={clsx('text-[26px] font-bold tabular-nums tracking-tight leading-tight', colorMap.amount)}>
         {formatCOP(amount)}
       </p>
 

@@ -33,11 +33,11 @@ export default function ResumenPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-white font-bold text-base">Resumen Financiero</h1>
-          <p className="text-slate-400 text-[11px] mt-0.5">{formatPeriod(period)}</p>
+          <h1 className="text-white font-bold text-[15px] tracking-tight">Resumen Financiero</h1>
+          <p className="text-slate-400 text-[12px] mt-0.5">{formatPeriod(period)}</p>
         </div>
         <button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-primary/15 text-brand-primary text-[11px] font-semibold hover:bg-brand-primary/25 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-border bg-surface-card text-slate-300 hover:text-white hover:border-slate-500 text-[12px] font-medium transition-all"
           aria-label="Exportar informe"
         >
           <Download size={13} />

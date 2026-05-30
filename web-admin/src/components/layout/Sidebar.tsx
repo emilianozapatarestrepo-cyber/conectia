@@ -1,16 +1,24 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw, Presentation, Settings, Building2, MessageSquare } from 'lucide-react';
+import {
+  BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw,
+  Presentation, Settings, Building2, MessageSquare,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { usePqrsStats } from '@/hooks/usePqrs';
 
 const NAV_ITEMS = [
-  { to: '/',             icon: BarChart2,      label: 'Resumen' },
-  { to: '/recaudo',      icon: DollarSign,     label: 'Recaudo' },
-  { to: '/cartera',      icon: FileText,       label: 'Cartera' },
-  { to: '/morosidad',    icon: AlertTriangle,  label: 'Morosidad' },
-  { to: '/conciliacion', icon: RefreshCw,      label: 'Conciliación' },
-  { to: '/unidades',     icon: Building2,      label: 'Unidades' },
-  { to: '/pqrs',         icon: MessageSquare,  label: 'PQRS' },
+  { to: '/',             icon: BarChart2,     label: 'Resumen' },
+  { to: '/recaudo',      icon: DollarSign,    label: 'Recaudo' },
+  { to: '/cartera',      icon: FileText,      label: 'Cartera' },
+  { to: '/morosidad',    icon: AlertTriangle, label: 'Morosidad' },
+  { to: '/conciliacion', icon: RefreshCw,     label: 'Conciliación' },
+  { to: '/unidades',     icon: Building2,     label: 'Unidades' },
+  { to: '/pqrs',         icon: MessageSquare, label: 'PQRS' },
+] as const;
+
+const BOTTOM_ITEMS = [
+  { to: '/asamblea',     icon: Presentation,  label: 'Asamblea' },
+  { to: '/configuracion', icon: Settings,     label: 'Configuración' },
 ] as const;
 
 export function Sidebar() {
@@ -18,14 +26,19 @@ export function Sidebar() {
   const openPqrs = (pqrsStats?.abierta ?? 0) + (pqrsStats?.en_proceso ?? 0);
 
   return (
-    <aside className="w-[160px] flex-shrink-0 bg-[#0a0f1e] border-r border-surface-border flex flex-col h-screen sticky top-0">
+    <aside className="w-[168px] flex-shrink-0 bg-[#080d1a] border-r border-white/[0.06] flex flex-col h-screen sticky top-0">
+
       {/* Logo */}
-      <div className="p-4 border-b border-surface-border">
-        <span className="text-white font-bold text-base tracking-tight">Conectia</span>
+      <div className="px-4 py-[18px] border-b border-white/[0.06] flex items-center gap-2.5">
+        {/* Logo mark */}
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0">
+          <span className="text-white font-black text-[13px] leading-none tracking-tight">C</span>
+        </div>
+        <span className="text-white font-bold text-[15px] tracking-tight">Conectia</span>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1" aria-label="Navegación principal">
+      {/* Main Navigation */}
+      <nav className="flex-1 py-3 px-2.5 space-y-0.5 overflow-y-auto" aria-label="Navegación principal">
         {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -33,47 +46,55 @@ export function Sidebar() {
             end={to === '/'}
             className={({ isActive }) =>
               clsx(
-                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                'relative flex items-center gap-2.5 pl-2.5 pr-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all',
                 isActive
-                  ? 'bg-brand-primary/15 text-brand-primary font-semibold'
-                  : 'text-slate-400 hover:text-white hover:bg-surface-hover'
+                  ? 'bg-brand-primary/[0.10] text-brand-primary'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.05]'
               )
             }
           >
-            <Icon size={15} strokeWidth={1.8} />
-            <span className="flex-1">{label}</span>
-            {to === '/pqrs' && openPqrs > 0 && (
-              <span className="ml-1 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-                {openPqrs > 9 ? '9+' : openPqrs}
-              </span>
+            {({ isActive }) => (
+              <>
+                {/* Active left border indicator */}
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-brand-primary" />
+                )}
+                <Icon
+                  size={15}
+                  strokeWidth={isActive ? 2.2 : 1.7}
+                  className="flex-shrink-0"
+                />
+                <span className="flex-1 min-w-0 truncate">{label}</span>
+                {to === '/pqrs' && openPqrs > 0 && (
+                  <span className="flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold tabular-nums leading-none flex-shrink-0">
+                    {openPqrs > 9 ? '9+' : openPqrs}
+                  </span>
+                )}
+              </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Bottom links */}
-      <div className="p-3 border-t border-surface-border">
-        <NavLink
-          to="/asamblea"
-          className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:text-white hover:bg-surface-hover"
-        >
-          <Presentation size={15} />
-          <span>Modo Asamblea</span>
-        </NavLink>
-        <NavLink
-          to="/configuracion"
-          className={({ isActive }) =>
-            clsx(
-              'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors mt-1',
-              isActive
-                ? 'bg-brand-primary/15 text-brand-primary font-semibold'
-                : 'text-slate-400 hover:text-white hover:bg-surface-hover'
-            )
-          }
-        >
-          <Settings size={15} />
-          <span>Configuración</span>
-        </NavLink>
+      {/* Bottom Navigation */}
+      <div className="px-2.5 py-3 border-t border-white/[0.06] space-y-0.5">
+        {BOTTOM_ITEMS.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              clsx(
+                'flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all',
+                isActive
+                  ? 'bg-brand-primary/[0.12] text-brand-primary'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.05]'
+              )
+            }
+          >
+            <Icon size={15} strokeWidth={1.7} className="flex-shrink-0" />
+            <span className="truncate">{label}</span>
+          </NavLink>
+        ))}
       </div>
     </aside>
   );
