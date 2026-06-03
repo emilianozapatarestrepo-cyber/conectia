@@ -20,6 +20,7 @@ import { createUnitsRouter } from './modules/units/presentation/units.routes.js'
 import { createBillingRouter } from './modules/billing/presentation/billing.routes.js';
 import { createCronRouter } from './modules/cron/presentation/cron.routes.js';
 import { createPqrsRouter } from './modules/pqrs/presentation/pqrs.routes.js';
+import { createAmenitiesRouter } from './modules/amenities/presentation/amenities.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -91,7 +92,8 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/periods', createPeriodsRouter());
   app.use('/api/v1/units',   createUnitsRouter());
   app.use('/api/v1/billing', createBillingRouter());
-  app.use('/api/v1/pqrs',   createPqrsRouter());
+  app.use('/api/v1/pqrs',      createPqrsRouter());
+  app.use('/api/v1/amenities', createAmenitiesRouter());
 
   // ── Cron endpoints (secret-protected, no user auth) ──
   app.use('/cron', createCronRouter());

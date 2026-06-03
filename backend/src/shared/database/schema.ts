@@ -326,6 +326,47 @@ export interface PqrsTable {
   updatedAt: Generated<Date>;
 }
 
+// ── Amenities & Bookings ──────────────────────────────────────────────────────
+
+export interface AmenitiesTable {
+  id:          Generated<string>;
+  tenantId:    string;
+  name:        string;
+  description: string | null;
+  icon:        string | null;    // emoji for UI
+  capacity:    number;           // max simultaneous groups
+  openTime:    string;           // "HH:MM:SS" from pg TIME
+  closeTime:   string;
+  slotMinutes: number;
+  advanceDays: number;
+  active:      Generated<boolean>;
+  createdAt:   Generated<Date>;
+  updatedAt:   Generated<Date>;
+}
+
+export type BookingStatus = 'pendiente' | 'aprobada' | 'rechazada' | 'cancelada';
+
+export interface AmenityBookingsTable {
+  id:            Generated<string>;
+  tenantId:      string;
+  amenityId:     string;
+  unitId:        string | null;
+  unitLabel:     string | null;
+  residentName:  string;
+  residentPhone: string | null;
+  date:          ColumnType<Date, Date | string, Date | string>;
+  startTime:     string;         // "HH:MM"
+  endTime:       string;
+  attendees:     number;
+  status:        Generated<BookingStatus>;
+  notes:         string | null;
+  adminNotes:    string | null;
+  approvedBy:    string | null;
+  approvedAt:    Date | null;
+  createdAt:     Generated<Date>;
+  updatedAt:     Generated<Date>;
+}
+
 // ─── Database Interface (Kysely root) ────────────────────────────────────────
 
 export interface DB {
@@ -347,6 +388,8 @@ export interface DB {
   plans: PlansTable;
   subscriptions: SubscriptionsTable;
   pqrs: PqrsTable;
+  amenities: AmenitiesTable;
+  amenityBookings: AmenityBookingsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -406,3 +449,11 @@ export type SubscriptionUpdate = Updateable<SubscriptionsTable>;
 export type Pqrs = Selectable<PqrsTable>;
 export type NewPqrs = Insertable<PqrsTable>;
 export type PqrsUpdate = Updateable<PqrsTable>;
+
+export type Amenity = Selectable<AmenitiesTable>;
+export type NewAmenity = Insertable<AmenitiesTable>;
+export type AmenityUpdate = Updateable<AmenitiesTable>;
+
+export type AmenityBooking = Selectable<AmenityBookingsTable>;
+export type NewAmenityBooking = Insertable<AmenityBookingsTable>;
+export type AmenityBookingUpdate = Updateable<AmenityBookingsTable>;

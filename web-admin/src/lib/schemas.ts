@@ -123,3 +123,46 @@ export const pqrsStatsSchema = z.object({
 
 export type PqrsItem = z.infer<typeof pqrsSchema>;
 export type PqrsStats = z.infer<typeof pqrsStatsSchema>;
+
+// ── Amenities & Bookings ──────────────────────────────────────────────────────
+
+export const amenitySchema = z.object({
+  id:          z.string(),
+  name:        z.string(),
+  description: z.string().nullable(),
+  icon:        z.string().nullable(),
+  capacity:    z.number(),
+  openTime:    z.string(),
+  closeTime:   z.string(),
+  slotMinutes: z.number(),
+  advanceDays: z.number(),
+  active:      z.boolean(),
+  createdAt:   z.string().transform((v) => new Date(v)),
+  updatedAt:   z.string().transform((v) => new Date(v)),
+});
+
+export const amenityBookingSchema = z.object({
+  id:            z.string(),
+  amenityId:     z.string(),
+  unitId:        z.string().nullable(),
+  unitLabel:     z.string().nullable(),
+  residentName:  z.string(),
+  residentPhone: z.string().nullable(),
+  date:          z.string().transform((v) => new Date(v)),
+  startTime:     z.string(),
+  endTime:       z.string(),
+  attendees:     z.number(),
+  status:        z.enum(['pendiente', 'aprobada', 'rechazada', 'cancelada']),
+  notes:         z.string().nullable(),
+  adminNotes:    z.string().nullable(),
+  approvedBy:    z.string().nullable(),
+  approvedAt:    z.string().nullable().transform((v) => (v ? new Date(v) : null)),
+  createdAt:     z.string().transform((v) => new Date(v)),
+  updatedAt:     z.string().transform((v) => new Date(v)),
+  // joined fields
+  amenityName:   z.string().optional(),
+  amenityIcon:   z.string().nullable().optional(),
+});
+
+export type Amenity = z.output<typeof amenitySchema>;
+export type AmenityBooking = z.output<typeof amenityBookingSchema>;
