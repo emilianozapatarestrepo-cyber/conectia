@@ -166,3 +166,34 @@ export const amenityBookingSchema = z.object({
 
 export type Amenity = z.output<typeof amenitySchema>;
 export type AmenityBooking = z.output<typeof amenityBookingSchema>;
+
+// ── Announcements (Comunicados) ───────────────────────────────────────────────
+
+export const announcementSchema = z.object({
+  id:             z.string(),
+  title:          z.string(),
+  body:           z.string(),
+  audience:       z.enum(['todos', 'morosos', 'seleccion']),
+  unitIds:        z.array(z.string()).nullable(),
+  status:         z.enum(['borrador', 'publicado']),
+  createdBy:      z.string(),
+  publishedAt:    z.string().nullable().transform((v) => (v ? new Date(v) : null)),
+  createdAt:      z.string().transform((v) => new Date(v)),
+  updatedAt:      z.string().transform((v) => new Date(v)),
+  recipientCount: z.number().optional().default(0),
+  sentCount:      z.number().optional().default(0),
+});
+
+export const announcementRecipientSchema = z.object({
+  id:          z.string(),
+  unitId:      z.string(),
+  unitLabel:   z.string().nullable(),
+  ownerName:   z.string().nullable(),
+  phone:       z.string().nullable(),
+  sent:        z.boolean(),
+  sentAt:      z.string().nullable().transform((v) => (v ? new Date(v) : null)),
+  whatsappUrl: z.string().nullable(),
+});
+
+export type Announcement = z.output<typeof announcementSchema>;
+export type AnnouncementRecipient = z.output<typeof announcementRecipientSchema>;

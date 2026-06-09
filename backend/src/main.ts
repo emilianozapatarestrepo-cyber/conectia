@@ -21,6 +21,7 @@ import { createBillingRouter } from './modules/billing/presentation/billing.rout
 import { createCronRouter } from './modules/cron/presentation/cron.routes.js';
 import { createPqrsRouter } from './modules/pqrs/presentation/pqrs.routes.js';
 import { createAmenitiesRouter } from './modules/amenities/presentation/amenities.routes.js';
+import { createAnnouncementsRouter } from './modules/announcements/presentation/announcements.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -94,6 +95,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/billing', createBillingRouter());
   app.use('/api/v1/pqrs',      createPqrsRouter());
   app.use('/api/v1/amenities', createAmenitiesRouter());
+  app.use('/api/v1/announcements', createAnnouncementsRouter());
 
   // ── Cron endpoints (secret-protected, no user auth) ──
   app.use('/cron', createCronRouter());

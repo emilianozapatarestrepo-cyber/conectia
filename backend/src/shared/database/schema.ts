@@ -367,6 +367,38 @@ export interface AmenityBookingsTable {
   updatedAt:     Generated<Date>;
 }
 
+// ── Announcements (Comunicados) ───────────────────────────────────────────────
+
+export type AnnouncementAudience = 'todos' | 'morosos' | 'seleccion';
+export type AnnouncementStatus = 'borrador' | 'publicado';
+
+export interface AnnouncementsTable {
+  id:          Generated<string>;
+  tenantId:    string;
+  title:       string;
+  body:        string;
+  audience:    AnnouncementAudience;
+  unitIds:     string[] | null;
+  status:      Generated<AnnouncementStatus>;
+  createdBy:   string;
+  publishedAt: Date | null;
+  createdAt:   Generated<Date>;
+  updatedAt:   Generated<Date>;
+}
+
+export interface AnnouncementRecipientsTable {
+  id:             Generated<string>;
+  tenantId:       string;
+  announcementId: string;
+  unitId:         string;
+  unitLabel:      string | null;
+  ownerName:      string | null;
+  phone:          string | null;
+  sent:           Generated<boolean>;
+  sentAt:         Date | null;
+  createdAt:      Generated<Date>;
+}
+
 // ─── Database Interface (Kysely root) ────────────────────────────────────────
 
 export interface DB {
@@ -390,6 +422,8 @@ export interface DB {
   pqrs: PqrsTable;
   amenities: AmenitiesTable;
   amenityBookings: AmenityBookingsTable;
+  announcements: AnnouncementsTable;
+  announcementRecipients: AnnouncementRecipientsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -457,3 +491,10 @@ export type AmenityUpdate = Updateable<AmenitiesTable>;
 export type AmenityBooking = Selectable<AmenityBookingsTable>;
 export type NewAmenityBooking = Insertable<AmenityBookingsTable>;
 export type AmenityBookingUpdate = Updateable<AmenityBookingsTable>;
+
+export type Announcement = Selectable<AnnouncementsTable>;
+export type NewAnnouncement = Insertable<AnnouncementsTable>;
+export type AnnouncementUpdate = Updateable<AnnouncementsTable>;
+
+export type AnnouncementRecipient = Selectable<AnnouncementRecipientsTable>;
+export type NewAnnouncementRecipient = Insertable<AnnouncementRecipientsTable>;
