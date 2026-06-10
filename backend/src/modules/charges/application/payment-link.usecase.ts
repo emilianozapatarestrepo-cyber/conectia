@@ -28,7 +28,7 @@ export class PaymentLinkUseCase {
     const charge = await withTenantTransaction(tenantId, async (trx) =>
       trx
         .selectFrom('charges')
-        .select(['id', 'tenantId', 'unitId', 'userId', 'amount', 'currency', 'concept', 'status', 'unitLabel', 'ownerName'])
+        .select(['id', 'tenantId', 'unitId', 'userId', 'amount', 'paidAmount', 'currency', 'concept', 'status', 'unitLabel', 'ownerName'])
         .where('id', '=', chargeId)
         .where('tenantId', '=', tenantId)
         .executeTakeFirst(),
@@ -40,9 +40,13 @@ export class PaymentLinkUseCase {
       throw new Error('CHARGE_NOT_PAYABLE');
     }
 
-    const amount = typeof charge.amount === 'bigint'
-      ? charge.amount
-      : BigInt(String(charge.amount));
+    const toCents = (v: bigint | string | number): bigint =>
+      typeof v === 'bigint' ? v : BigInt(String(v));
+
+    // Charge the OUTSTANDING balance, not the face amount — a partially-paid
+    // charge must never generate a checkout for money already received.
+    const amount = toCents(charge.amount) - toCents(charge.paidAmount);
+    if (amount <= 0n) throw new Error('CHARGE_ALREADY_PAID');
 
     // Lookup phone from unit roster
     const unit = await db
@@ -55,13 +59,16 @@ export class PaymentLinkUseCase {
 
     const phone = unit?.phone ?? null;
 
-    // Idempotent: reuse existing pending intent for this charge
+    // Idempotent: reuse existing pending intent for this charge — but only if
+    // its amount still matches the outstanding balance (a partial payment in
+    // between makes the old intent stale; Wompi would charge the wrong total).
     const existing = await db
       .selectFrom('paymentIntents')
       .select(['id', 'idempotencyKey'])
       .where('chargeId', '=', chargeId)
       .where('tenantId', '=', tenantId)
       .where('status',   '=', 'pending')
+      .where('amount',   '=', amount)
       .orderBy('createdAt', 'desc')
       .limit(1)
       .executeTakeFirst();

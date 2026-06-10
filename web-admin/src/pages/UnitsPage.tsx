@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, type Unit, type UnitInput } from '@/hooks/useUnits';
+import {
+  useUnits, useCreateUnit, useUpdateUnit, useDeleteUnit, useGeneratePortalLink,
+  type Unit, type UnitInput, type PortalLink,
+} from '@/hooks/useUnits';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { formatCOP } from '@/lib/formatters';
+import { Link2, Copy, Check, MessageCircle, Loader2, ShieldAlert } from 'lucide-react';
 
 // ── Unit form modal ───────────────────────────────────────────────────────────
 
@@ -131,6 +135,114 @@ function Field({
   );
 }
 
+// ── Portal link modal ─────────────────────────────────────────────────────────
+
+function PortalLinkModal({ unit, onClose }: { unit: Unit; onClose: () => void }) {
+  const generate = useGeneratePortalLink();
+  const [link, setLink]     = useState<PortalLink | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setError(null);
+    try {
+      setLink(await generate.mutateAsync(unit.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error generando el link');
+    }
+  }
+
+  async function handleCopy() {
+    if (!link) return;
+    await navigator.clipboard.writeText(link.portalUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-surface-card border border-surface-border rounded-xl w-full max-w-sm p-5 space-y-4">
+        <div>
+          <h2 className="text-white font-semibold text-sm">Portal de residentes</h2>
+          <p className="text-slate-400 text-[11px] mt-0.5">
+            {unit.label}{unit.ownerName ? ` · ${unit.ownerName}` : ''}
+          </p>
+        </div>
+
+        {error && (
+          <p className="text-red-400 text-[11px] bg-red-900/20 rounded px-3 py-2">{error}</p>
+        )}
+
+        {!link && (
+          <>
+            <p className="text-slate-400 text-[12px] leading-relaxed">
+              Genera un link de acceso personal para que el residente consulte su estado
+              de cuenta, pague en línea, reserve zonas comunes y radique PQRS — sin
+              contraseñas ni registros.
+            </p>
+            <div className="flex items-start gap-2 bg-amber-900/15 border border-amber-700/25 rounded-lg px-3 py-2">
+              <ShieldAlert size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-amber-300/90 text-[11px]">
+                Si la unidad ya tenía un link, este lo reemplaza y el anterior deja de funcionar.
+              </p>
+            </div>
+            <button
+              onClick={() => void handleGenerate()}
+              disabled={generate.isPending}
+              className="w-full py-2.5 rounded-lg bg-brand-primary hover:bg-brand-primary/90 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {generate.isPending && <Loader2 size={13} className="animate-spin" />}
+              Generar link de acceso
+            </button>
+          </>
+        )}
+
+        {link && (
+          <>
+            <div className="bg-surface-hover border border-surface-border rounded-lg px-3 py-2.5">
+              <p className="text-[11px] text-slate-300 font-mono break-all">{link.portalUrl}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void handleCopy()}
+                className="flex-1 py-2 rounded-lg border border-surface-border text-slate-300 hover:text-white text-[12px] font-medium transition-colors flex items-center justify-center gap-1.5"
+              >
+                {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </button>
+              {link.whatsappUrl && (
+                <a
+                  href={link.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[12px] font-semibold transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <MessageCircle size={12} />
+                  Enviar por WhatsApp
+                </a>
+              )}
+            </div>
+            <p className="text-slate-500 text-[10px]">
+              Este link es personal de la unidad. Guárdalo o envíalo ahora — por seguridad
+              no se vuelve a mostrar (puedes generar uno nuevo cuando quieras).
+            </p>
+          </>
+        )}
+
+        <button
+          onClick={onClose}
+          className="w-full py-2 rounded-lg border border-surface-border text-slate-400 hover:text-white text-sm transition-colors"
+        >
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function UnitsPage() {
@@ -141,6 +253,7 @@ export default function UnitsPage() {
 
   const [modal, setModal]     = useState<'new' | Unit | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [portalUnit, setPortalUnit] = useState<Unit | null>(null);
 
   const totalFee = units.reduce((s, u) => s + u.feeAmount, 0n);
 
@@ -181,6 +294,13 @@ export default function UnitsPage() {
       align: 'center',
       render: (r) => (
         <div className="flex items-center gap-1 justify-center">
+          <button
+            onClick={() => setPortalUnit(r)}
+            className="p-1.5 rounded hover:bg-blue-900/30 text-slate-400 hover:text-blue-400 transition-colors"
+            title="Link del portal de residentes"
+          >
+            <Link2 size={14} />
+          </button>
           <button
             onClick={() => setModal(r)}
             className="p-1.5 rounded hover:bg-surface-hover text-slate-400 hover:text-white transition-colors"
@@ -250,6 +370,11 @@ export default function UnitsPage() {
           onClose={() => setModal(null)}
           onSave={(data) => updateUnit.mutateAsync({ id: (modal as Unit).id, ...data }).then(() => {})}
         />
+      )}
+
+      {/* Portal link */}
+      {portalUnit && (
+        <PortalLinkModal unit={portalUnit} onClose={() => setPortalUnit(null)} />
       )}
 
       {/* Delete confirm */}

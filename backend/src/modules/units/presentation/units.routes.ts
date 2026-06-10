@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { withTenantTransaction } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
 import { requireSubscription } from '../../billing/application/require-subscription.js';
+import { revokeUnitPortalTokens } from '../../portal/application/portal-token.service.js';
 
 const unitSchema = z.object({
   unitId:    z.string().min(1).max(50),
@@ -91,12 +92,13 @@ export function createUnitsRouter(): Router {
       const tenantId = req.user!.tenantId!;
       let created = 0;
       let updated = 0;
+      const ownerChangedUnitIds: string[] = [];
 
       await withTenantTransaction(tenantId, async (trx) => {
         for (const u of body.units) {
           const existing = await trx
             .selectFrom('units')
-            .select('id')
+            .select(['id', 'ownerName'])
             .where('tenantId', '=', tenantId)
             .where('unitId',   '=', u.unitId)
             .executeTakeFirst();
@@ -107,6 +109,11 @@ export function createUnitsRouter(): Router {
               .set({ ...u, feeAmount: u.feeAmount, updatedAt: new Date() })
               .where('id', '=', existing.id)
               .execute();
+            // Owner changed (unit sold/re-rented) → the previous resident's
+            // portal link must stop working
+            if (existing.ownerName !== u.ownerName) {
+              ownerChangedUnitIds.push(u.unitId);
+            }
             updated++;
           } else {
             await trx.insertInto('units').values({
@@ -124,6 +131,10 @@ export function createUnitsRouter(): Router {
         }
       });
 
+      for (const unitId of ownerChangedUnitIds) {
+        await revokeUnitPortalTokens(tenantId, unitId);
+      }
+
       res.status(201).json({ created, updated, total: body.units.length });
     } catch (err) { next(err); }
   });
@@ -135,19 +146,36 @@ export function createUnitsRouter(): Router {
       const body = updateUnitSchema.parse(req.body);
       const tenantId = req.user!.tenantId!;
 
-      const result = await withTenantTransaction(tenantId, async (trx) =>
+      // Snapshot before update — owner change must revoke the portal link
+      const before = await withTenantTransaction(tenantId, async (trx) =>
         trx
-          .updateTable('units')
-          .set({ ...body, updatedAt: new Date() })
+          .selectFrom('units')
+          .select(['unitId', 'ownerName'])
           .where('id', '=', id)
           .where('tenantId', '=', tenantId)
           .executeTakeFirst(),
       );
 
-      if (!result || Number(result.numUpdatedRows) === 0) {
+      if (!before) {
         res.status(404).json({ error: 'Unit not found' });
         return;
       }
+
+      await withTenantTransaction(tenantId, async (trx) =>
+        trx
+          .updateTable('units')
+          .set({ ...body, updatedAt: new Date() })
+          .where('id', '=', id)
+          .where('tenantId', '=', tenantId)
+          .execute(),
+      );
+
+      const ownerChanged = body.ownerName !== undefined && body.ownerName !== before.ownerName;
+      const deactivated  = body.active === false;
+      if (ownerChanged || deactivated) {
+        await revokeUnitPortalTokens(tenantId, before.unitId);
+      }
+
       res.json({ success: true });
     } catch (err) { next(err); }
   });
@@ -158,6 +186,15 @@ export function createUnitsRouter(): Router {
       const id = z.string().uuid().parse(req.params['id']);
       const tenantId = req.user!.tenantId!;
 
+      const unit = await withTenantTransaction(tenantId, async (trx) =>
+        trx
+          .selectFrom('units')
+          .select('unitId')
+          .where('id', '=', id)
+          .where('tenantId', '=', tenantId)
+          .executeTakeFirst(),
+      );
+
       await withTenantTransaction(tenantId, async (trx) =>
         trx
           .updateTable('units')
@@ -166,6 +203,12 @@ export function createUnitsRouter(): Router {
           .where('tenantId', '=', tenantId)
           .execute(),
       );
+
+      // A deactivated unit's portal link must stop working immediately
+      if (unit) {
+        await revokeUnitPortalTokens(tenantId, unit.unitId);
+      }
+
       res.json({ success: true });
     } catch (err) { next(err); }
   });

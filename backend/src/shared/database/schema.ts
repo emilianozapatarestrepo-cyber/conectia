@@ -399,6 +399,19 @@ export interface AnnouncementRecipientsTable {
   createdAt:      Generated<Date>;
 }
 
+// ── Unit Portal Tokens (Portal Residente) ─────────────────────────────────────
+
+export interface UnitPortalTokensTable {
+  id:             Generated<string>;
+  tenantId:       string;
+  unitId:         string;          // building-scoped id (units.unitId)
+  tokenHash:      string;          // sha256 hex — raw token never stored
+  active:         Generated<boolean>;
+  createdAt:      Generated<Date>;
+  revokedAt:      Date | null;
+  lastAccessedAt: Date | null;
+}
+
 // ─── Database Interface (Kysely root) ────────────────────────────────────────
 
 export interface DB {
@@ -424,6 +437,7 @@ export interface DB {
   amenityBookings: AmenityBookingsTable;
   announcements: AnnouncementsTable;
   announcementRecipients: AnnouncementRecipientsTable;
+  unitPortalTokens: UnitPortalTokensTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────

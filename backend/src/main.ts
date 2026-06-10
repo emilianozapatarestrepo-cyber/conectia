@@ -22,6 +22,8 @@ import { createCronRouter } from './modules/cron/presentation/cron.routes.js';
 import { createPqrsRouter } from './modules/pqrs/presentation/pqrs.routes.js';
 import { createAmenitiesRouter } from './modules/amenities/presentation/amenities.routes.js';
 import { createAnnouncementsRouter } from './modules/announcements/presentation/announcements.routes.js';
+import { createPortalRouter } from './modules/portal/presentation/portal.routes.js';
+import { createPortalAdminRouter } from './modules/portal/presentation/portal-admin.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -63,6 +65,17 @@ async function bootstrap(): Promise<void> {
     message: { error: 'Webhook rate limit exceeded' },
   });
 
+  // Portal Residente — public capability-URL surface. Reads are bursty
+  // (mobile, WhatsApp opens); writes (PQRS, reservas) are further capped
+  // per-unit inside the routes.
+  const portalLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiadas solicitudes, intenta de nuevo en un minuto' },
+  });
+
   // Cron protection — extra layer on top of secret validation
   const cronLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
@@ -74,6 +87,7 @@ async function bootstrap(): Promise<void> {
 
   app.use('/api/v1/', apiLimiter);
   app.use('/api/v1/export', exportLimiter);
+  app.use('/api/v1/portal', portalLimiter);
   app.use('/webhooks', webhookLimiter);
   app.use('/cron', cronLimiter);
 
@@ -96,12 +110,15 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/pqrs',      createPqrsRouter());
   app.use('/api/v1/amenities', createAmenitiesRouter());
   app.use('/api/v1/announcements', createAnnouncementsRouter());
+  app.use('/api/v1/portal-admin', createPortalAdminRouter());
 
   // ── Cron endpoints (secret-protected, no user auth) ──
   app.use('/cron', createCronRouter());
 
   // ── Public endpoints (no auth) ──
   app.use('/api/v1/pay', createPayRouter());
+  // Portal Residente — capability-URL auth (token per unit, see portal module)
+  app.use('/api/v1/portal', createPortalRouter());
 
   // ── Webhook endpoints (no auth — verified by HMAC signature) ──
   app.use('/webhooks', createWebhookRouter());

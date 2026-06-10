@@ -12,6 +12,7 @@ const ConciliacionPage = lazy(() => import('@/pages/ConciliacionPage'));
 const AsambleaPage     = lazy(() => import('@/pages/AsambleaPage'));
 const LoginPage        = lazy(() => import('@/pages/LoginPage'));
 const PayPage          = lazy(() => import('@/pages/PayPage'));
+const PortalPage       = lazy(() => import('@/pages/PortalPage'));
 const UnitsPage           = lazy(() => import('@/pages/UnitsPage'));
 const ConfiguracionPage   = lazy(() => import('@/pages/ConfiguracionPage'));
 const PqrsPage            = lazy(() => import('@/pages/PqrsPage'));
@@ -26,6 +27,8 @@ export const router = createBrowserRouter([
   { path: '/login',          element: <Suspensed><LoginPage /></Suspensed> },
   // Public — no auth required. Residents land here from WhatsApp/SMS links.
   { path: '/pay/:reference', element: <Suspensed><PayPage /></Suspensed> },
+  // Public — capability-URL portal per unit (token = auth)
+  { path: '/mi-unidad/:token', element: <Suspensed><PortalPage /></Suspensed> },
   {
     element: <ProtectedRoute />,
     children: [{

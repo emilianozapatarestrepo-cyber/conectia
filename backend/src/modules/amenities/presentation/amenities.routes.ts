@@ -3,16 +3,33 @@ import { z } from 'zod';
 import { db } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
 import { requireSubscription } from '../../billing/application/require-subscription.js';
+import { createBookingIfAvailable } from '../application/booking-availability.js';
+
+/** pg DATE columns come back as JS Date at server-midnight — emit date-only
+ *  strings so Bogotá clients (UTC-5) don't render the previous day. */
+function toDateOnly(d: Date | string): string {
+  return d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10);
+}
 
 const bookingStatusEnum = z.enum(['pendiente', 'aprobada', 'rechazada', 'cancelada']);
+
+// Strict HH:MM (00:00–23:59) — `\d{2}:\d{2}` would let "23:99" through to a
+// failed pg TIME cast and a 500
+const timeStr = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+// Calendar-valid date: regex + round-trip check rejects e.g. 2026-02-31
+const dateStr = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, {
+    message: 'Fecha inválida',
+  });
 
 const createAmenitySchema = z.object({
   name:        z.string().min(2).max(100),
   description: z.string().max(500).nullable().default(null),
   icon:        z.string().max(10).nullable().default(null),
   capacity:    z.number().int().min(1).default(1),
-  openTime:    z.string().regex(/^\d{2}:\d{2}$/).default('07:00'),
-  closeTime:   z.string().regex(/^\d{2}:\d{2}$/).default('22:00'),
+  openTime:    timeStr.default('07:00'),
+  closeTime:   timeStr.default('22:00'),
   slotMinutes: z.number().int().min(30).max(1440).default(120),
   advanceDays: z.number().int().min(1).max(365).default(30),
 });
@@ -23,9 +40,9 @@ const createBookingSchema = z.object({
   unitLabel:     z.string().nullable().default(null),
   residentName:  z.string().min(2).max(200),
   residentPhone: z.string().nullable().default(null),
-  date:          z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  startTime:     z.string().regex(/^\d{2}:\d{2}$/),
-  endTime:       z.string().regex(/^\d{2}:\d{2}$/),
+  date:          dateStr,
+  startTime:     timeStr,
+  endTime:       timeStr,
   attendees:     z.number().int().min(1).default(1),
   notes:         z.string().max(1000).nullable().default(null),
 });
@@ -134,7 +151,7 @@ export function createAmenitiesRouter(): Router {
         .offset(filter.offset)
         .execute();
 
-      res.json(rows);
+      res.json(rows.map((r) => ({ ...r, date: toDateOnly(r.date) })));
     } catch (err) { next(err); }
   });
 
@@ -144,73 +161,32 @@ export function createAmenitiesRouter(): Router {
       const body     = createBookingSchema.parse(req.body);
       const tenantId = req.user!.tenantId!;
 
-      // Verify amenity belongs to this tenant
-      const amenity = await db
-        .selectFrom('amenities')
-        .select(['id', 'capacity'])
-        .where('id', '=', body.amenityId)
-        .where('tenantId', '=', tenantId)
-        .where('active', '=', true)
-        .executeTakeFirst();
+      const result = await createBookingIfAvailable({
+        tenantId,
+        amenityId:     body.amenityId,
+        unitId:        body.unitId,
+        unitLabel:     body.unitLabel,
+        residentName:  body.residentName,
+        residentPhone: body.residentPhone,
+        date:          body.date,
+        startTime:     body.startTime,
+        endTime:       body.endTime,
+        attendees:     body.attendees,
+        notes:         body.notes,
+      });
 
-      if (!amenity) {
-        res.status(404).json({ error: 'Zona no encontrada' });
+      if (!result.ok) {
+        if (result.reason === 'amenity_not_found') {
+          res.status(404).json({ error: 'Zona no encontrada' });
+        } else {
+          res.status(409).json({
+            error: 'Horario no disponible. La zona ya alcanzó su capacidad máxima en ese horario.',
+          });
+        }
         return;
       }
 
-      // Check for overlapping approved/pending bookings
-      const overlapping = await db
-        .selectFrom('amenityBookings')
-        .select('id')
-        .where('amenityId', '=', body.amenityId)
-        .where('tenantId', '=', tenantId)
-        .where('date', '=', body.date as unknown as Date)
-        .where('status', 'in', ['pendiente', 'aprobada'])
-        .where((eb) => eb.or([
-          // new booking starts during existing
-          eb.and([
-            eb('startTime', '<=', body.startTime),
-            eb('endTime', '>', body.startTime),
-          ]),
-          // new booking ends during existing
-          eb.and([
-            eb('startTime', '<', body.endTime),
-            eb('endTime', '>=', body.endTime),
-          ]),
-          // new booking completely covers existing
-          eb.and([
-            eb('startTime', '>=', body.startTime),
-            eb('endTime', '<=', body.endTime),
-          ]),
-        ]))
-        .execute();
-
-      if (overlapping.length >= amenity.capacity) {
-        res.status(409).json({
-          error: 'Horario no disponible. La zona ya alcanzó su capacidad máxima en ese horario.',
-        });
-        return;
-      }
-
-      const row = await db
-        .insertInto('amenityBookings')
-        .values({
-          tenantId,
-          amenityId:     body.amenityId,
-          unitId:        body.unitId,
-          unitLabel:     body.unitLabel,
-          residentName:  body.residentName,
-          residentPhone: body.residentPhone,
-          date:          body.date,
-          startTime:     body.startTime,
-          endTime:       body.endTime,
-          attendees:     body.attendees,
-          notes:         body.notes,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
-
-      res.status(201).json(row);
+      res.status(201).json({ ...result.row, date: toDateOnly(result.row.date) });
     } catch (err) { next(err); }
   });
 

@@ -67,3 +67,27 @@ export function useImportUnits() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['units'] }),
   });
 }
+
+// ── Portal Residente — link generation per unit ───────────────────────────────
+
+const portalLinkSchema = z.object({
+  unitId:      z.string(),
+  label:       z.string(),
+  portalUrl:   z.string(),
+  whatsappUrl: z.string().nullable(),
+});
+
+export type PortalLink = z.infer<typeof portalLinkSchema>;
+
+/**
+ * Generates (or rotates) the resident portal access link for a unit.
+ * Rotating invalidates any previously shared link for that unit.
+ */
+export function useGeneratePortalLink() {
+  return useMutation({
+    mutationFn: async (unitRowId: string) => {
+      const { data } = await api.post(`/portal-admin/links/${unitRowId}`);
+      return portalLinkSchema.parse(data);
+    },
+  });
+}
