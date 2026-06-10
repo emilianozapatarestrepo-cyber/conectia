@@ -237,17 +237,18 @@ export type AlertType = 'mora_critica' | 'mora_nueva' | 'conciliacion_pendiente'
 export type AlertSeverity = 'critical' | 'warning' | 'info';
 
 export interface UnitsTable {
-  id:         Generated<string>;
-  tenantId:   string;
-  unitId:     string;          // building-scoped identifier: "A-101"
-  label:      string;
-  ownerName:  string | null;
-  phone:      string | null;   // Colombian mobile without +57
-  email:      string | null;
-  feeAmount:  ColumnType<bigint | string, bigint | number | string, bigint | number | string>;
-  active:     Generated<boolean>;
-  createdAt:  Generated<Date>;
-  updatedAt:  Generated<Date>;
+  id:          Generated<string>;
+  tenantId:    string;
+  unitId:      string;          // building-scoped identifier: "A-101"
+  label:       string;
+  ownerName:   string | null;
+  phone:       string | null;   // Colombian mobile without +57
+  email:       string | null;
+  feeAmount:   ColumnType<bigint | string, bigint | number | string, bigint | number | string>;
+  coefficient: ColumnType<string, number | string, number | string>;  // coeficiente de copropiedad (Ley 675)
+  active:      Generated<boolean>;
+  createdAt:   Generated<Date>;
+  updatedAt:   Generated<Date>;
 }
 
 // ── SaaS Billing ──────────────────────────────────────────────────────────────
@@ -438,6 +439,10 @@ export interface DB {
   announcements: AnnouncementsTable;
   announcementRecipients: AnnouncementRecipientsTable;
   unitPortalTokens: UnitPortalTokensTable;
+  assemblies: AssembliesTable;
+  assemblyAgendaItems: AssemblyAgendaItemsTable;
+  assemblyAttendances: AssemblyAttendancesTable;
+  assemblyVotes: AssemblyVotesTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -512,3 +517,80 @@ export type AnnouncementUpdate = Updateable<AnnouncementsTable>;
 
 export type AnnouncementRecipient = Selectable<AnnouncementRecipientsTable>;
 export type NewAnnouncementRecipient = Insertable<AnnouncementRecipientsTable>;
+
+// ── Assemblies (Sprint 12 — Ley 675) ─────────────────────────────────────────
+
+export type AssemblyStatus   = 'borrador' | 'convocada' | 'en_curso' | 'cerrada';
+export type AssemblyType     = 'ordinaria' | 'extraordinaria';
+export type AgendaItemType   = 'informativo' | 'votacion';
+export type VoteValue        = 'a_favor' | 'en_contra' | 'abstencion';
+export type AttendanceMode   = 'presencial' | 'virtual' | 'poder';
+
+export interface AssembliesTable {
+  id:                 Generated<string>;
+  tenantId:           string;
+  type:               AssemblyType;
+  title:              string;
+  status:             Generated<AssemblyStatus>;
+  scheduledDate:      ColumnType<Date | null, Date | string | null, Date | string | null>;
+  scheduledTime:      string | null;
+  location:           string | null;
+  quorumPct:          ColumnType<string, number | string, number | string>;
+  totalCoefficient:   ColumnType<string | null, number | string | null, number | string | null>;
+  notes:              string | null;
+  minutesText:        string | null;
+  minutesApprovedAt:  Date | null;
+  createdBy:          string;
+  createdAt:          Generated<Date>;
+  updatedAt:          Generated<Date>;
+}
+
+export interface AssemblyAgendaItemsTable {
+  id:               Generated<string>;
+  assemblyId:       string;
+  tenantId:         string;
+  order:            number;
+  title:            string;
+  description:      string | null;
+  type:             AgendaItemType;
+  requiredMajority: ColumnType<string, number | string, number | string>;
+  resolvedStatus:   string | null;
+  createdAt:        Generated<Date>;
+}
+
+export interface AssemblyAttendancesTable {
+  id:             Generated<string>;
+  assemblyId:     string;
+  tenantId:       string;
+  unitId:         string;
+  unitLabel:      string;
+  ownerName:      string | null;
+  coefficient:    ColumnType<string, number | string, number | string>;
+  attendanceMode: AttendanceMode;
+  delegateName:   string | null;
+  registeredAt:   Generated<Date>;
+}
+
+export interface AssemblyVotesTable {
+  id:           Generated<string>;
+  assemblyId:   string;
+  agendaItemId: string;
+  tenantId:     string;
+  unitId:       string;
+  vote:         VoteValue;
+  coefficient:  ColumnType<string, number | string, number | string>;
+  castAt:       Generated<Date>;
+}
+
+export type Assembly         = Selectable<AssembliesTable>;
+export type NewAssembly      = Insertable<AssembliesTable>;
+export type AssemblyUpdate   = Updateable<AssembliesTable>;
+
+export type AssemblyAgendaItem       = Selectable<AssemblyAgendaItemsTable>;
+export type NewAssemblyAgendaItem    = Insertable<AssemblyAgendaItemsTable>;
+
+export type AssemblyAttendance       = Selectable<AssemblyAttendancesTable>;
+export type NewAssemblyAttendance    = Insertable<AssemblyAttendancesTable>;
+
+export type AssemblyVote             = Selectable<AssemblyVotesTable>;
+export type NewAssemblyVote          = Insertable<AssemblyVotesTable>;

@@ -3,14 +3,15 @@ import { api } from '@/lib/api';
 import { z } from 'zod';
 
 const unitSchema = z.object({
-  id:        z.string(),
-  unitId:    z.string(),
-  label:     z.string(),
-  ownerName: z.string().nullable(),
-  phone:     z.string().nullable(),
-  email:     z.string().nullable(),
-  feeAmount: z.string().transform((v) => BigInt(v)),
-  active:    z.boolean(),
+  id:          z.string(),
+  unitId:      z.string(),
+  label:       z.string(),
+  ownerName:   z.string().nullable(),
+  phone:       z.string().nullable(),
+  email:       z.string().nullable(),
+  feeAmount:   z.string().transform((v) => BigInt(v)),
+  coefficient: z.string().optional().default('0'),
+  active:      z.boolean(),
 });
 
 export type Unit = z.infer<typeof unitSchema>;

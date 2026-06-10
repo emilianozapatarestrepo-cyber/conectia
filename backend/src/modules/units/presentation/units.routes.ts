@@ -7,12 +7,13 @@ import { requireSubscription } from '../../billing/application/require-subscript
 import { revokeUnitPortalTokens } from '../../portal/application/portal-token.service.js';
 
 const unitSchema = z.object({
-  unitId:    z.string().min(1).max(50),
-  label:     z.string().min(1).max(200),
-  ownerName: z.string().max(200).nullable().default(null),
-  phone:     z.string().max(20).nullable().default(null),
-  email:     z.string().email().nullable().default(null),
-  feeAmount: z.number().int().min(0),   // centavos COP
+  unitId:      z.string().min(1).max(50),
+  label:       z.string().min(1).max(200),
+  ownerName:   z.string().max(200).nullable().default(null),
+  phone:       z.string().max(20).nullable().default(null),
+  email:       z.string().email().nullable().default(null),
+  feeAmount:   z.number().int().min(0),
+  coefficient: z.number().min(0).max(9999.9999).default(0),
 });
 
 const updateUnitSchema = unitSchema.partial().extend({
@@ -31,7 +32,7 @@ export function createUnitsRouter(): Router {
       const rows = await withTenantTransaction(tenantId, async (trx) =>
         trx
           .selectFrom('units')
-          .select(['id', 'unitId', 'label', 'ownerName', 'phone', 'email', 'feeAmount', 'active'])
+          .select(['id', 'unitId', 'label', 'ownerName', 'phone', 'email', 'feeAmount', 'coefficient', 'active'])
           .where('tenantId', '=', tenantId)
           .where('active', '=', true)
           .orderBy('unitId', 'asc')
@@ -39,7 +40,8 @@ export function createUnitsRouter(): Router {
       );
       res.json(rows.map((r) => ({
         ...r,
-        feeAmount: r.feeAmount?.toString() ?? '0',
+        feeAmount:   r.feeAmount?.toString() ?? '0',
+        coefficient: r.coefficient?.toString() ?? '0',
       })));
     } catch (err) { next(err); }
   });
@@ -69,12 +71,13 @@ export function createUnitsRouter(): Router {
         trx.insertInto('units').values({
           id,
           tenantId,
-          unitId:    body.unitId,
-          label:     body.label,
-          ownerName: body.ownerName,
-          phone:     body.phone,
-          email:     body.email,
-          feeAmount: body.feeAmount,
+          unitId:      body.unitId,
+          label:       body.label,
+          ownerName:   body.ownerName,
+          phone:       body.phone,
+          email:       body.email,
+          feeAmount:   body.feeAmount,
+          coefficient: body.coefficient,
         }).execute(),
       );
 
@@ -117,14 +120,15 @@ export function createUnitsRouter(): Router {
             updated++;
           } else {
             await trx.insertInto('units').values({
-              id:        uuidv4(),
+              id:          uuidv4(),
               tenantId,
-              unitId:    u.unitId,
-              label:     u.label,
-              ownerName: u.ownerName,
-              phone:     u.phone,
-              email:     u.email,
-              feeAmount: u.feeAmount,
+              unitId:      u.unitId,
+              label:       u.label,
+              ownerName:   u.ownerName,
+              phone:       u.phone,
+              email:       u.email,
+              feeAmount:   u.feeAmount,
+              coefficient: u.coefficient,
             }).execute();
             created++;
           }
