@@ -23,4 +23,5 @@ COPY migrations                       ./migrations
 
 USER appuser
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+# Run migrations (idempotent) then start the API
+CMD ["sh", "-c", "node dist/migrate.js && node dist/main.js"]

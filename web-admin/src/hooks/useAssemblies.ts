@@ -8,7 +8,7 @@ const assemblyStatusEnum  = z.enum(['borrador', 'convocada', 'en_curso', 'cerrad
 const assemblyTypeEnum    = z.enum(['ordinaria', 'extraordinaria']);
 const agendaItemTypeEnum  = z.enum(['informativo', 'votacion']);
 const attendanceModeEnum  = z.enum(['presencial', 'virtual', 'poder']);
-const voteValueEnum       = z.enum(['a_favor', 'en_contra', 'abstencion']);
+export const voteValueEnum = z.enum(['a_favor', 'en_contra', 'abstencion']);
 
 const assemblySummarySchema = z.object({
   id:                z.string(),

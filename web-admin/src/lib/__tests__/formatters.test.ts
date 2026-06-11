@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCOP, formatPct, formatDate, formatTrend } from '../formatters';
+import { formatCOP, formatPct, formatTrend } from '../formatters';
 
 describe('formatCOP', () => {
   it('formats bigint COP centavos to Colombian peso string', () => {

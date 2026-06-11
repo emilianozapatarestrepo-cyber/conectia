@@ -45,6 +45,7 @@ export function CreateChargeModal({ onClose, onSuccess, preselectedUnitId }: Pro
   useEffect(() => {
     if (didAutoSelect.current || unitId || units.length === 0) return;
     const first = units.find((u) => u.active);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (first) setUnitId(first.id);
     didAutoSelect.current = true;
   }, [units, unitId]);

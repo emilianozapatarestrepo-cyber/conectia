@@ -22,7 +22,7 @@ export function createExportRouter(): Router {
   router.get('/statement', requireAdmin, async (req, res, next) => {
     try {
       const { unitId, period } = z.object({
-        unitId: z.string().regex(/^[A-Za-z0-9_\-]{1,64}$/, 'unitId must be alphanumeric'),
+        unitId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'unitId must be alphanumeric'),
         period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
       }).parse(req.query);
 
@@ -216,7 +216,7 @@ export function createExportRouter(): Router {
   router.get('/paz-y-salvo', requireAdmin, async (req, res, next) => {
     try {
       const { unitId, asOf } = z.object({
-        unitId: z.string().regex(/^[A-Za-z0-9_\-]{1,64}$/, 'unitId must be alphanumeric'),
+        unitId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'unitId must be alphanumeric'),
         asOf: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/).optional(),
       }).parse(req.query);
 

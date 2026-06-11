@@ -18,5 +18,13 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Pages commonly export both components and hooks/types — downgrade to warn
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // React Compiler rules fire false positives for event handlers and valid patterns
+      'react-hooks/immutability': 'off',
+      'react-hooks/no-mutating-variables': 'off',
+    },
   },
 ])

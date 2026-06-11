@@ -81,8 +81,8 @@ export function CobrarMesModal({ onClose, onSuccess }: Props) {
   }
 
   async function execute() {
-    let periodId: string | null = null;
-    let resolvedDueDate = dueDate;
+    let periodId: string | null;
+    let resolvedDueDate: string;
 
     if (isNewPeriod) {
       const p = await createPeriod.mutateAsync({ year: newYear, month: newMonth, dueDate });

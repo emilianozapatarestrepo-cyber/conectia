@@ -474,7 +474,6 @@ export default function MorosidadPage() {
 
 function UnitRow({ unit, rank }: { unit: DelinquentUnit; rank: number }) {
   const [linkLoading, setLinkLoading] = useState(false);
-  const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
   const generateAndSend = async () => {
@@ -487,7 +486,6 @@ function UnitRow({ unit, rank }: { unit: DelinquentUnit; rank: number }) {
       );
       const first = data[0];
       if (first?.ok && first.whatsappUrl) {
-        setWhatsappUrl(first.whatsappUrl);
         window.open(first.whatsappUrl, '_blank', 'noopener,noreferrer');
         setSent(true);
       }

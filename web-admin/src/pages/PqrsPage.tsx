@@ -76,6 +76,7 @@ function KpiCard({ label, value, icon: Icon, color, warning }: {
 function DueDateBadge({ dueDate }: { dueDate: Date }) {
   const overdue  = isPast(dueDate);
   const dueSoon  = !overdue && dueDate <= addDays(new Date(), 3);
+  // eslint-disable-next-line react-hooks/purity
   const days     = Math.round((dueDate.getTime() - Date.now()) / 86400_000);
 
   if (overdue) {
