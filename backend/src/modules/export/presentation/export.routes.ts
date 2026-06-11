@@ -5,8 +5,12 @@ import { requireSubscription } from '../../billing/application/require-subscript
 import { ChargesRepository } from '../../charges/infrastructure/charges.repository.js';
 import { sql } from 'kysely';
 import { db, withTenantTransaction } from '../../../shared/database/db.js';
-import { generateStatementPDF } from '../infrastructure/pdf.generator.js';
+import { generateStatementPDF, generatePazYSalvoPDF } from '../infrastructure/pdf.generator.js';
 import { generatePortfolioExcel } from '../infrastructure/excel.generator.js';
+
+function sanitizeCsvCell(v: string): string {
+  return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+}
 
 export function createExportRouter(): Router {
   const router = Router();
@@ -114,11 +118,11 @@ export function createExportRouter(): Router {
           : String(r.effectiveDate).slice(0, 10);
         return [
           fecha,
-          r.transactionType ?? '',
+          sanitizeCsvCell(r.transactionType ?? ''),
           r.code ?? '',
-          r.name ?? '',
-          r.unitLabel ?? '',
-          (r.description ?? '').replace(/;/g, ','),
+          sanitizeCsvCell(r.name ?? ''),
+          sanitizeCsvCell(r.unitLabel ?? ''),
+          sanitizeCsvCell((r.description ?? '').replace(/;/g, ',')),
           debit,
           credit,
           r.sourceId ?? '',
@@ -156,6 +160,7 @@ export function createExportRouter(): Router {
           )
           .where('charges.tenantId', '=', tenantId)
           .where('charges.status', 'in', ['active', 'partial', 'overdue'])
+          .where('charges.dueDate', '<=', new Date(cutDate))
           .groupBy([
             'charges.unitId', 'charges.unitLabel', 'charges.ownerName',
             'units.phone', 'units.coefficient',
@@ -187,9 +192,9 @@ export function createExportRouter(): Router {
           ? r.ultimoPago.toISOString().slice(0, 10)
           : (r.ultimoPago ? String(r.ultimoPago).slice(0, 10) : 'Nunca');
         return [
-          r.unitLabel ?? r.unitId,
-          r.ownerName ?? '',
-          r.phone ?? '',
+          sanitizeCsvCell(r.unitLabel ?? r.unitId),
+          sanitizeCsvCell(r.ownerName ?? ''),
+          sanitizeCsvCell(r.phone ?? ''),
           coef,
           String(r.cargosCount ?? 0),
           String(r.mesesMora ?? 0),
@@ -204,6 +209,67 @@ export function createExportRouter(): Router {
         'Content-Disposition': `attachment; filename="saldos-cartera-${cutDate}.csv"`,
       });
       res.send(csv);
+    } catch (err) { next(err); }
+  });
+
+  // GET /export/paz-y-salvo?unitId=&asOf=YYYY-MM-DD
+  router.get('/paz-y-salvo', requireAdmin, async (req, res, next) => {
+    try {
+      const { unitId, asOf } = z.object({
+        unitId: z.string().regex(/^[A-Za-z0-9_\-]{1,64}$/, 'unitId must be alphanumeric'),
+        asOf: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/).optional(),
+      }).parse(req.query);
+
+      const tenantId = req.user!.tenantId!;
+      const cutDate = asOf ?? new Date().toISOString().slice(0, 10);
+
+      const [unit, tenant] = await Promise.all([
+        db.selectFrom('units')
+          .select(['unitId', 'label', 'ownerName', 'phone'])
+          .where('tenantId', '=', tenantId)
+          .where('unitId', '=', unitId)
+          .where('active', '=', true)
+          .executeTakeFirst(),
+        db.selectFrom('tenants').select('name').where('id', '=', tenantId).executeTakeFirst(),
+      ]);
+
+      if (!unit) {
+        res.status(404).json({ error: 'Unidad no encontrada' });
+        return;
+      }
+
+      const balanceRow = await db
+        .selectFrom('charges')
+        .where('tenantId', '=', tenantId)
+        .where('unitId', '=', unitId)
+        .where('status', 'in', ['active', 'partial', 'overdue'])
+        .where('dueDate', '<=', new Date(cutDate))
+        .select(sql<string>`COALESCE(SUM(charges.amount - charges.paid_amount), 0)`.as('balance'))
+        .executeTakeFirst();
+
+      const balance = BigInt(balanceRow?.balance ? Math.round(Number(balanceRow.balance)) : 0);
+
+      if (balance > 0n) {
+        res.status(409).json({ error: 'La unidad tiene saldo pendiente', balance: balance.toString() });
+        return;
+      }
+
+      const buildingName = tenant?.name ?? 'Conjunto Residencial';
+      const pdfBuffer = await generatePazYSalvoPDF({
+        buildingName,
+        unitLabel:  unit.label,
+        ownerName:  unit.ownerName,
+        asOf:       cutDate,
+        generatedAt: new Date().toLocaleDateString('es-CO'),
+      });
+
+      const safeUnitId = encodeURIComponent(unitId);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="paz-y-salvo-${safeUnitId}-${cutDate}.pdf"`,
+        'Content-Length': String(pdfBuffer.length),
+      });
+      res.send(pdfBuffer);
     } catch (err) { next(err); }
   });
 

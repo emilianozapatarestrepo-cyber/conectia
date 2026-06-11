@@ -4,8 +4,19 @@ import { es } from 'date-fns/locale';
 import {
   Plus, ChevronLeft, Users, CheckCircle2, XCircle, Minus,
   Play, Square, FileText, Loader2, Trash2, Vote,
-  CalendarDays, MapPin, Percent, AlertTriangle,
+  CalendarDays, MapPin, Percent, AlertTriangle, Download,
 } from 'lucide-react';
+import { api } from '@/lib/api';
+
+async function downloadBlob(path: string, filename: string) {
+  const { data } = await api.get<Blob>(path, { responseType: 'blob' });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 import { clsx } from 'clsx';
 import {
   useAssembliesList, useAssemblyDetail,
@@ -575,6 +586,7 @@ function AssemblyDetail({ assembly, onBack }: { assembly: AssemblySummary; onBac
   const closeAssembly = useCloseAssembly();
   const [activeTab, setActiveTab] = useState<DetailTab>('asistencia');
   const [err, setErr] = useState('');
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const status = detail?.assembly.status ?? assembly.status;
 
@@ -659,6 +671,28 @@ function AssemblyDetail({ assembly, onBack }: { assembly: AssemblySummary; onBac
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-[13px] font-semibold transition-all disabled:opacity-50">
             {closeAssembly.isPending ? <Loader2 size={13} className="animate-spin" /> : <Square size={13} />}
             Cerrar asamblea
+          </button>
+        )}
+        {status === 'cerrada' && (
+          <button
+            onClick={async () => {
+              setPdfDownloading(true);
+              try {
+                await downloadBlob(
+                  `/assemblies/${assembly.id}/minutes/pdf`,
+                  `acta-asamblea-${assembly.id.slice(0, 8)}.pdf`,
+                );
+              } catch {
+                setErr('No se pudo generar el PDF del acta.');
+              } finally {
+                setPdfDownloading(false);
+              }
+            }}
+            disabled={pdfDownloading}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-600 hover:bg-white/[0.05] text-slate-300 hover:text-white text-[13px] font-semibold transition-all disabled:opacity-50"
+          >
+            {pdfDownloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            Descargar acta PDF
           </button>
         )}
       </div>

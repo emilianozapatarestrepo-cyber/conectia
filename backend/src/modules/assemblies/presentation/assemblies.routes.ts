@@ -4,6 +4,7 @@ import { db } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
 import { requireSubscription } from '../../billing/application/require-subscription.js';
 import { toDateOnly } from '../../../shared/validation/datetime.js';
+import { generateMinutesPDF } from '../../export/infrastructure/pdf.generator.js';
 
 const assemblyTypeEnum    = z.enum(['ordinaria', 'extraordinaria']);
 const assemblyStatusEnum  = z.enum(['borrador', 'convocada', 'en_curso', 'cerrada']);
@@ -650,6 +651,79 @@ export function createAssembliesRouter(): Router {
 
       const tally = await tallyVotesSingle(body.agendaItemId, parseFloat(agendaItem.requiredMajority));
       res.json({ agendaItemId: body.agendaItemId, ...tally });
+    } catch (err) { next(err); }
+  });
+
+  // ── GET /assemblies/:id/minutes/pdf — generate acta PDF ──────────────────
+  router.get('/:id/minutes/pdf', requireAdmin, async (req, res, next) => {
+    try {
+      const id       = z.string().uuid().parse(req.params['id']);
+      const tenantId = req.user!.tenantId!;
+
+      const assembly = await db
+        .selectFrom('assemblies')
+        .selectAll()
+        .where('id', '=', id)
+        .where('tenantId', '=', tenantId)
+        .executeTakeFirst();
+
+      if (!assembly) { res.status(404).json({ error: 'Asamblea no encontrada' }); return; }
+      if (assembly.status !== 'cerrada') {
+        res.status(409).json({ error: 'Solo se puede generar el acta de una asamblea cerrada' });
+        return;
+      }
+
+      const quorumPct = parseFloat(assembly.quorumPct);
+      const [quorum, agendaRaw, attendances, tenant] = await Promise.all([
+        buildQuorumSummary(tenantId, id, assembly.totalCoefficient, quorumPct),
+        db.selectFrom('assemblyAgendaItems').selectAll()
+          .where('assemblyId', '=', id).where('tenantId', '=', tenantId)
+          .orderBy('order', 'asc').orderBy('createdAt', 'asc').execute(),
+        db.selectFrom('assemblyAttendances').selectAll()
+          .where('assemblyId', '=', id).where('tenantId', '=', tenantId)
+          .orderBy('registeredAt', 'asc').execute(),
+        db.selectFrom('tenants').select('name').where('id', '=', tenantId).executeTakeFirst(),
+      ]);
+
+      const votingItems = agendaRaw.filter((i) => i.type === 'votacion');
+      const majorityMap = Object.fromEntries(votingItems.map((i) => [i.id, parseFloat(i.requiredMajority)]));
+      const votesByItem = await tallyVotesBatch(votingItems.map((i) => i.id), majorityMap);
+
+      const pdfBuffer = await generateMinutesPDF({
+        buildingName:      tenant?.name ?? 'Conjunto Residencial',
+        assemblyType:      assembly.type,
+        assemblyTitle:     assembly.title,
+        scheduledDate:     assembly.scheduledDate ? toDateOnly(assembly.scheduledDate) : null,
+        location:          assembly.location,
+        quorum,
+        attendances: attendances.map((a) => ({
+          unitId:         a.unitId,
+          unitLabel:      a.unitLabel,
+          ownerName:      a.ownerName,
+          attendanceMode: a.attendanceMode,
+          coefficient:    a.coefficient,
+        })),
+        agenda: agendaRaw.map((item, i) => ({
+          order:          i + 1,
+          title:          item.title,
+          type:           item.type as 'votacion' | 'informativo',
+          description:    item.description,
+          resolvedStatus: item.resolvedStatus,
+          votes:          item.type === 'votacion' ? (votesByItem[item.id] ?? null) : null,
+        })),
+        minutesText:       assembly.minutesText,
+        minutesApprovedAt: assembly.minutesApprovedAt
+          ? new Date(assembly.minutesApprovedAt).toLocaleDateString('es-CO')
+          : null,
+        generatedAt: new Date().toLocaleDateString('es-CO'),
+      });
+
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="acta-asamblea-${id.slice(0, 8)}.pdf"`,
+        'Content-Length': String(pdfBuffer.length),
+      });
+      res.send(pdfBuffer);
     } catch (err) { next(err); }
   });
 

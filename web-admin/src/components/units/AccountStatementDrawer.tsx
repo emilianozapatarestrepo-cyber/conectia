@@ -65,14 +65,18 @@ async function downloadBlob(path: string, filename: string) {
 export function AccountStatementDrawer({ unitId, unitLabel, period, onClose }: Props) {
   const { data, isLoading } = useUnitStatement(unitId);
   const [downloading, setDownloading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const handleDownloadPdf = async () => {
     setDownloading(true);
+    setPdfError(null);
     try {
       await downloadBlob(
-        `/export/statement?unitId=${encodeURIComponent(unitId)}&period=${period}`,
+        `/export/statement?unitId=${encodeURIComponent(unitId)}&period=${encodeURIComponent(period)}`,
         `estado-cuenta-${unitId}-${period}.pdf`,
       );
+    } catch {
+      setPdfError('No se pudo descargar el PDF. Intenta de nuevo.');
     } finally {
       setDownloading(false);
     }
@@ -220,6 +224,9 @@ export function AccountStatementDrawer({ unitId, unitLabel, period, onClose }: P
         </div>
 
         {/* Footer */}
+        {pdfError && (
+          <p className="px-5 py-2 text-status-red text-[11px] text-center flex-shrink-0">{pdfError}</p>
+        )}
         <div className="flex items-center justify-between px-5 py-3 border-t border-surface-border flex-shrink-0 gap-2">
           <button
             onClick={() => void handleDownloadPdf()}

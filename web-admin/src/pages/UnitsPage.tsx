@@ -5,7 +5,8 @@ import {
 } from '@/hooks/useUnits';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { formatCOP } from '@/lib/formatters';
-import { Link2, Copy, Check, MessageCircle, Loader2, ShieldAlert } from 'lucide-react';
+import { Link2, Copy, Check, MessageCircle, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { PazSalvoDrawer } from '@/components/units/PazSalvoDrawer';
 
 // ── Unit form modal ───────────────────────────────────────────────────────────
 
@@ -254,6 +255,7 @@ export default function UnitsPage() {
   const [modal, setModal]     = useState<'new' | Unit | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [portalUnit, setPortalUnit] = useState<Unit | null>(null);
+  const [pazSalvoUnit, setPazSalvoUnit] = useState<Unit | null>(null);
 
   const totalFee = units.reduce((s, u) => s + u.feeAmount, 0n);
 
@@ -294,6 +296,13 @@ export default function UnitsPage() {
       align: 'center',
       render: (r) => (
         <div className="flex items-center gap-1 justify-center">
+          <button
+            onClick={() => setPazSalvoUnit(r)}
+            className="p-1.5 rounded hover:bg-green-900/30 text-slate-400 hover:text-emerald-400 transition-colors"
+            title="Paz y Salvo"
+          >
+            <ShieldCheck size={14} />
+          </button>
           <button
             onClick={() => setPortalUnit(r)}
             className="p-1.5 rounded hover:bg-blue-900/30 text-slate-400 hover:text-blue-400 transition-colors"
@@ -369,6 +378,15 @@ export default function UnitsPage() {
           initial={modal}
           onClose={() => setModal(null)}
           onSave={(data) => updateUnit.mutateAsync({ id: (modal as Unit).id, ...data }).then(() => {})}
+        />
+      )}
+
+      {/* Paz y Salvo */}
+      {pazSalvoUnit && (
+        <PazSalvoDrawer
+          unitId={pazSalvoUnit.unitId}
+          unitLabel={pazSalvoUnit.label}
+          onClose={() => setPazSalvoUnit(null)}
         />
       )}
 
