@@ -443,6 +443,7 @@ export interface DB {
   assemblyAgendaItems: AssemblyAgendaItemsTable;
   assemblyAttendances: AssemblyAttendancesTable;
   assemblyVotes: AssemblyVotesTable;
+  chargeReminders: ChargeRemindersTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -554,7 +555,7 @@ export interface AssemblyAgendaItemsTable {
   description:      string | null;
   type:             AgendaItemType;
   requiredMajority: ColumnType<string, number | string, number | string>;
-  resolvedStatus:   string | null;
+  resolvedStatus:   'aprobado' | 'rechazado' | 'abstencion' | null;
   createdAt:        Generated<Date>;
 }
 
@@ -594,3 +595,31 @@ export type NewAssemblyAttendance    = Insertable<AssemblyAttendancesTable>;
 
 export type AssemblyVote             = Selectable<AssemblyVotesTable>;
 export type NewAssemblyVote          = Insertable<AssemblyVotesTable>;
+
+// ── Charge Reminders (Sprint 13) ──────────────────────────────────────────────
+
+export type ReminderType   = 'D1' | 'D7' | 'D30';
+export type ReminderStatus = 'pending' | 'sent' | 'skipped' | 'failed';
+
+export interface ChargeRemindersTable {
+  id:           Generated<string>;
+  tenantId:     string;
+  chargeId:     string;
+  unitId:       string;
+  unitLabel:    string | null;
+  ownerName:    string | null;
+  phone:        string | null;
+  amountCents:  ColumnType<string, bigint | number | string, bigint | number | string>;
+  concept:      string;
+  dueDate:      ColumnType<Date, Date | string, Date | string>;
+  reminderType: ReminderType;
+  status:       Generated<ReminderStatus>;
+  scheduledFor: ColumnType<Date, Date | string, Date | string>;
+  sentAt:       Date | null;
+  sentVia:      'manual' | 'api' | 'whatsapp_link' | null;
+  errorMsg:     string | null;
+  createdAt:    Generated<Date>;
+}
+
+export type ChargeReminder    = Selectable<ChargeRemindersTable>;
+export type NewChargeReminder = Insertable<ChargeRemindersTable>;

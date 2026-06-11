@@ -9,6 +9,8 @@ import { SettlementUseCase } from '../application/settlement.usecase.js';
 import { db } from '../../../shared/database/db.js';
 import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middlewares/auth.js';
 import { requireSubscription } from '../../billing/application/require-subscription.js';
+import { markReminderSent, skipReminder, buildReminderWhatsAppUrl } from '../application/overdue-reminders.js';
+import { toDateOnly } from '../../../shared/validation/datetime.js';
 
 const createChargeSchema = z.object({
   unitId: z.string().min(1),
@@ -231,6 +233,103 @@ export function createChargesRouter(): Router {
       }
       next(err);
     }
+  });
+
+  // ── GET /charges/reminders — pending reminders list ────────────────────────
+  router.get('/reminders', requireAdmin, async (req, res, next) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const filter = z.object({
+        status: z.enum(['pending', 'sent', 'skipped', 'failed']).default('pending'),
+        type:   z.enum(['D1', 'D7', 'D30']).optional(),
+        limit:  z.coerce.number().int().min(1).max(200).default(100),
+        offset: z.coerce.number().int().min(0).default(0),
+      }).parse(req.query);
+
+      const appUrl = (await import('../../../config/env.js')).env.APP_URL ?? '';
+
+      let query = db
+        .selectFrom('chargeReminders')
+        .selectAll()
+        .where('tenantId', '=', tenantId)
+        .where('status', '=', filter.status);
+
+      if (filter.type) query = query.where('reminderType', '=', filter.type);
+
+      const rows = await query
+        .orderBy('scheduledFor', 'asc')
+        .orderBy('createdAt', 'asc')
+        .limit(filter.limit)
+        .offset(filter.offset)
+        .execute();
+
+      const enriched = await Promise.all(rows.map(async (r) => {
+        // Fetch current payment-link reference so wa.me goes to the right place
+        const intent = appUrl && r.phone ? await db
+          .selectFrom('paymentIntents')
+          .select(['idempotencyKey'])
+          .where('chargeId', '=', r.chargeId)
+          .where('tenantId', '=', tenantId)
+          .where('status', '=', 'pending')
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .executeTakeFirst()
+          : null;
+
+        const daysOverdue = r.reminderType === 'D1' ? 1 : r.reminderType === 'D7' ? 7 : 30;
+        const payUrl = intent ? `${appUrl}/pay/${intent.idempotencyKey}` : '';
+        const whatsappUrl = r.phone && payUrl
+          ? buildReminderWhatsAppUrl({
+              phone: r.phone, ownerName: r.ownerName, unitLabel: r.unitLabel,
+              concept: r.concept, amountCents: r.amountCents,
+              daysOverdue, payUrl,
+            })
+          : null;
+
+        return {
+          ...r,
+          dueDate:      toDateOnly(r.dueDate),
+          scheduledFor: toDateOnly(r.scheduledFor),
+          amountCents:  r.amountCents.toString(),
+          whatsappUrl,
+        };
+      }));
+
+      const total = await db
+        .selectFrom('chargeReminders')
+        .select((eb) => eb.fn.countAll<string>().as('count'))
+        .where('tenantId', '=', tenantId)
+        .where('status', '=', filter.status)
+        .executeTakeFirst();
+
+      res.json({ reminders: enriched, total: Number(total?.count ?? 0) });
+    } catch (err) { next(err); }
+  });
+
+  // ── PATCH /charges/reminders/:id/send — mark as sent ───────────────────────
+  router.patch('/reminders/:id/send', requireAdmin, async (req, res, next) => {
+    try {
+      const id       = z.string().uuid().parse(req.params['id']);
+      const tenantId = req.user!.tenantId!;
+      const { via }  = z.object({
+        via: z.enum(['manual', 'whatsapp_link']).default('whatsapp_link'),
+      }).parse(req.body);
+
+      const ok = await markReminderSent(tenantId, id, via);
+      if (!ok) { res.status(404).json({ error: 'Recordatorio no encontrado o ya procesado' }); return; }
+      res.json({ success: true });
+    } catch (err) { next(err); }
+  });
+
+  // ── PATCH /charges/reminders/:id/skip — skip reminder ──────────────────────
+  router.patch('/reminders/:id/skip', requireAdmin, async (req, res, next) => {
+    try {
+      const id       = z.string().uuid().parse(req.params['id']);
+      const tenantId = req.user!.tenantId!;
+      const ok       = await skipReminder(tenantId, id);
+      if (!ok) { res.status(404).json({ error: 'Recordatorio no encontrado o ya procesado' }); return; }
+      res.json({ success: true });
+    } catch (err) { next(err); }
   });
 
   return router;

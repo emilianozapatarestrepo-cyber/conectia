@@ -47,8 +47,8 @@ async function buildQuorumSummary(
   tenantId: string,
   assemblyId: string,
   snapshotTotal: string | null,
+  quorumPct: number,           // caller already has this — no extra query needed
 ) {
-  // Live sum of active units' coefficients (or the snapshot if assembly has started)
   let totalCoefficient: number;
   if (snapshotTotal !== null) {
     totalCoefficient = parseFloat(snapshotTotal);
@@ -62,63 +62,95 @@ async function buildQuorumSummary(
     totalCoefficient = parseFloat(totRow?.total ?? '0');
   }
 
-  const attendances = await db
+  // One query for both present-sum and count — avoids a second round-trip
+  const statsRow = await db
     .selectFrom('assemblyAttendances')
-    .select((eb) => eb.fn.sum<string>('coefficient').as('present'))
+    .select([
+      (eb) => eb.fn.sum<string>('coefficient').as('present'),
+      (eb) => eb.fn.countAll<string>().as('count'),
+    ])
     .where('assemblyId', '=', assemblyId)
     .executeTakeFirst();
 
-  const presentCoefficient = parseFloat(attendances?.present ?? '0');
-
-  const assembly = await db
-    .selectFrom('assemblies')
-    .select('quorumPct')
-    .where('id', '=', assemblyId)
-    .executeTakeFirst();
-
-  const quorumPct = parseFloat(assembly?.quorumPct ?? '50');
-  const quorumReached = totalCoefficient > 0
+  const presentCoefficient = parseFloat(statsRow?.present ?? '0');
+  const attendanceCount    = Number(statsRow?.count ?? 0);
+  const quorumReached      = totalCoefficient > 0
     && (presentCoefficient / totalCoefficient) * 100 >= quorumPct;
-
-  const countRow = await db
-    .selectFrom('assemblyAttendances')
-    .select((eb) => eb.fn.countAll<string>().as('count'))
-    .where('assemblyId', '=', assemblyId)
-    .executeTakeFirst();
 
   return {
     totalCoefficient,
     presentCoefficient,
     quorumPct,
     quorumReached,
-    attendanceCount: Number(countRow?.count ?? 0),
+    attendanceCount,
     presentPct: totalCoefficient > 0
       ? Math.round((presentCoefficient / totalCoefficient) * 10000) / 100
       : 0,
   };
 }
 
-// ── Helper: tally votes for an agenda item ───────────────────────────────────
+// ── Helper: batch-tally votes for multiple agenda items in ONE query ─────────
+// Returns a map keyed by agendaItemId — avoids N+1 on GET /:id
 
-async function tallyVotes(agendaItemId: string, requiredMajority: number) {
-  const votes = await db
+function emptyTally() {
+  return {
+    a_favor:    { count: 0, coefficient: 0 },
+    en_contra:  { count: 0, coefficient: 0 },
+    abstencion: { count: 0, coefficient: 0 },
+  };
+}
+
+async function tallyVotesBatch(
+  itemIds: string[],
+  requiredMajorityByItem: Record<string, number>,
+): Promise<Record<string, ReturnType<typeof buildTallyResult>>> {
+  if (itemIds.length === 0) return {};
+
+  const rows = await db
     .selectFrom('assemblyVotes')
-    .select(['vote', (eb) => eb.fn.sum<string>('coefficient').as('coeff'), (eb) => eb.fn.countAll<string>().as('count')])
-    .where('agendaItemId', '=', agendaItemId)
-    .groupBy('vote')
+    .select([
+      'agendaItemId',
+      'vote',
+      (eb) => eb.fn.sum<string>('coefficient').as('coeff'),
+      (eb) => eb.fn.countAll<string>().as('count'),
+    ])
+    .where('agendaItemId', 'in', itemIds)
+    .groupBy(['agendaItemId', 'vote'])
     .execute();
 
-  const tally = { a_favor: { count: 0, coefficient: 0 }, en_contra: { count: 0, coefficient: 0 }, abstencion: { count: 0, coefficient: 0 } };
-  for (const v of votes) {
-    tally[v.vote as keyof typeof tally] = { count: Number(v.count), coefficient: parseFloat(v.coeff ?? '0') };
+  const tallies: Record<string, ReturnType<typeof emptyTally>> = {};
+  for (const r of rows) {
+    if (!tallies[r.agendaItemId]) tallies[r.agendaItemId] = emptyTally();
+    const t = tallies[r.agendaItemId]!;
+    t[r.vote as keyof ReturnType<typeof emptyTally>] = {
+      count: Number(r.count),
+      coefficient: parseFloat(r.coeff ?? '0'),
+    };
   }
 
+  const result: Record<string, ReturnType<typeof buildTallyResult>> = {};
+  for (const id of itemIds) {
+    const t = tallies[id] ?? emptyTally();
+    result[id] = buildTallyResult(t, requiredMajorityByItem[id] ?? 50);
+  }
+  return result;
+}
+
+function buildTallyResult(
+  tally: ReturnType<typeof emptyTally>,
+  requiredMajority: number,
+) {
   const totalVoted = tally.a_favor.coefficient + tally.en_contra.coefficient + tally.abstencion.coefficient;
-  const approved = totalVoted > 0
+  const approved   = totalVoted > 0
     ? (tally.a_favor.coefficient / totalVoted) * 100 >= requiredMajority
     : null;
-
   return { ...tally, totalVoted, approved };
+}
+
+// Single-item tally (used in POST /votes response)
+async function tallyVotesSingle(agendaItemId: string, requiredMajority: number) {
+  const map = await tallyVotesBatch([agendaItemId], { [agendaItemId]: requiredMajority });
+  return map[agendaItemId] ?? buildTallyResult(emptyTally(), requiredMajority);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,7 +234,8 @@ export function createAssembliesRouter(): Router {
 
       if (!assembly) { res.status(404).json({ error: 'Asamblea no encontrada' }); return; }
 
-      const quorum = await buildQuorumSummary(tenantId, id, assembly.totalCoefficient);
+      const quorumPct = parseFloat(assembly.quorumPct);
+      const quorum    = await buildQuorumSummary(tenantId, id, assembly.totalCoefficient, quorumPct);
 
       const agendaRaw = await db
         .selectFrom('assemblyAgendaItems')
@@ -213,11 +246,16 @@ export function createAssembliesRouter(): Router {
         .orderBy('createdAt', 'asc')
         .execute();
 
-      const agenda = await Promise.all(agendaRaw.map(async (item) => {
-        const votes = item.type === 'votacion'
-          ? await tallyVotes(item.id, parseFloat(item.requiredMajority))
-          : null;
-        return { ...item, votes };
+      // Batch-fetch all votes in one query — no N+1
+      const votingItems = agendaRaw.filter((i) => i.type === 'votacion');
+      const majorityMap = Object.fromEntries(
+        votingItems.map((i) => [i.id, parseFloat(i.requiredMajority)])
+      );
+      const votesByItem = await tallyVotesBatch(votingItems.map((i) => i.id), majorityMap);
+
+      const agenda = agendaRaw.map((item) => ({
+        ...item,
+        votes: item.type === 'votacion' ? (votesByItem[item.id] ?? null) : null,
       }));
 
       const attendances = await db
@@ -275,18 +313,9 @@ export function createAssembliesRouter(): Router {
       const id       = z.string().uuid().parse(req.params['id']);
       const tenantId = req.user!.tenantId!;
 
-      const current = await db
-        .selectFrom('assemblies')
-        .select('status')
-        .where('id', '=', id)
-        .where('tenantId', '=', tenantId)
-        .executeTakeFirst();
-
-      if (!current) { res.status(404).json({ error: 'Asamblea no encontrada' }); return; }
-      if (current.status === 'en_curso') { res.status(409).json({ error: 'La asamblea ya está en curso' }); return; }
-      if (current.status === 'cerrada')  { res.status(409).json({ error: 'La asamblea ya está cerrada' }); return; }
-
-      // Snapshot the total coefficient of all active units at this moment
+      // Snapshot the total coefficient of all active units at this moment.
+      // Do this BEFORE the UPDATE so the snapshot is fresh even if two concurrent
+      // requests race — both would snapshot the same live value.
       const totRow = await db
         .selectFrom('units')
         .select((eb) => eb.fn.sum<string>('coefficient').as('total'))
@@ -296,13 +325,29 @@ export function createAssembliesRouter(): Router {
 
       const totalCoefficient = parseFloat(totRow?.total ?? '0');
 
+      // Atomic transition: the WHERE clause on status prevents double-starting.
+      // If the assembly is already en_curso or cerrada, the UPDATE returns no row.
       const row = await db
         .updateTable('assemblies')
         .set({ status: 'en_curso', totalCoefficient })
         .where('id', '=', id)
         .where('tenantId', '=', tenantId)
+        .where('status', 'in', ['borrador', 'convocada'])
         .returningAll()
-        .executeTakeFirstOrThrow();
+        .executeTakeFirst();
+
+      if (!row) {
+        // Could be 404 or already started/closed — check which
+        const exists = await db
+          .selectFrom('assemblies')
+          .select('status')
+          .where('id', '=', id)
+          .where('tenantId', '=', tenantId)
+          .executeTakeFirst();
+        if (!exists) { res.status(404).json({ error: 'Asamblea no encontrada' }); return; }
+        res.status(409).json({ error: `La asamblea ya está ${exists.status}` });
+        return;
+      }
 
       res.json({ ...row, scheduledDate: row.scheduledDate ? toDateOnly(row.scheduledDate) : null });
     } catch (err) { next(err); }
@@ -482,25 +527,7 @@ export function createAssembliesRouter(): Router {
 
       if (!unit) { res.status(404).json({ error: 'Unidad no encontrada' }); return; }
 
-      // Upsert: update attendance mode if already registered
-      const existing = await db
-        .selectFrom('assemblyAttendances')
-        .select('id')
-        .where('assemblyId', '=', assemblyId)
-        .where('unitId', '=', body.unitId)
-        .executeTakeFirst();
-
-      if (existing) {
-        const row = await db
-          .updateTable('assemblyAttendances')
-          .set({ attendanceMode: body.attendanceMode, delegateName: body.delegateName })
-          .where('id', '=', existing.id)
-          .returningAll()
-          .executeTakeFirstOrThrow();
-        res.json(row);
-        return;
-      }
-
+      // Atomic upsert via ON CONFLICT — avoids check-then-insert race
       const row = await db
         .insertInto('assemblyAttendances')
         .values({
@@ -513,6 +540,10 @@ export function createAssembliesRouter(): Router {
           attendanceMode: body.attendanceMode,
           delegateName:   body.delegateName,
         })
+        .onConflict((oc) => oc
+          .columns(['assemblyId', 'unitId'])
+          .doUpdateSet({ attendanceMode: body.attendanceMode, delegateName: body.delegateName })
+        )
         .returningAll()
         .executeTakeFirstOrThrow();
 
@@ -524,7 +555,7 @@ export function createAssembliesRouter(): Router {
   router.delete('/:id/attendances/:unitId', requireAdmin, async (req, res, next) => {
     try {
       const assemblyId = z.string().uuid().parse(req.params['id']);
-      const unitId     = req.params['unitId'] ?? '';
+      const unitId     = z.string().min(1).max(50).parse(req.params['unitId']);
       const tenantId   = req.user!.tenantId!;
 
       const deleted = await db
@@ -616,7 +647,7 @@ export function createAssembliesRouter(): Router {
           .execute();
       }
 
-      const tally = await tallyVotes(body.agendaItemId, parseFloat(agendaItem.requiredMajority));
+      const tally = await tallyVotesSingle(body.agendaItemId, parseFloat(agendaItem.requiredMajority));
       res.json({ agendaItemId: body.agendaItemId, ...tally });
     } catch (err) { next(err); }
   });
@@ -629,14 +660,14 @@ export function createAssembliesRouter(): Router {
 
       const assembly = await db
         .selectFrom('assemblies')
-        .select(['id', 'totalCoefficient'])
+        .select(['id', 'totalCoefficient', 'quorumPct'])
         .where('id', '=', id)
         .where('tenantId', '=', tenantId)
         .executeTakeFirst();
 
       if (!assembly) { res.status(404).json({ error: 'Asamblea no encontrada' }); return; }
 
-      const quorum = await buildQuorumSummary(tenantId, id, assembly.totalCoefficient);
+      const quorum = await buildQuorumSummary(tenantId, id, assembly.totalCoefficient, parseFloat(assembly.quorumPct));
       res.json(quorum);
     } catch (err) { next(err); }
   });

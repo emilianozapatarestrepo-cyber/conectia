@@ -136,7 +136,7 @@ export function useUpdateAssembly(id: string) {
   return useMutation({
     mutationFn: async (payload: Partial<Parameters<ReturnType<typeof useCreateAssembly>['mutateAsync']>[0]>) => {
       const { data } = await api.put(`/assemblies/${id}`, payload);
-      return data as AssemblySummary;
+      return assemblySummarySchema.parse(data);
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['assemblies'] });
@@ -150,7 +150,7 @@ export function useStartAssembly() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { data } = await api.patch(`/assemblies/${id}/start`);
-      return data as AssemblySummary;
+      return assemblySummarySchema.parse(data);
     },
     onSuccess: (_d, id) => {
       void qc.invalidateQueries({ queryKey: ['assemblies'] });
@@ -164,7 +164,7 @@ export function useCloseAssembly() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { data } = await api.patch(`/assemblies/${id}/close`);
-      return data as AssemblySummary;
+      return assemblySummarySchema.parse(data);
     },
     onSuccess: (_d, id) => {
       void qc.invalidateQueries({ queryKey: ['assemblies'] });

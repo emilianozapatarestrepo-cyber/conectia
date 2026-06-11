@@ -4,6 +4,7 @@ import { env } from '../../../config/env.js';
 import { db } from '../../../shared/database/db.js';
 import { logger } from '../../../shared/logger.js';
 import { MarkOverdueUseCase } from '../../charges/application/mark-overdue.usecase.js';
+import { generateOverdueReminders } from '../../charges/application/overdue-reminders.js';
 
 const log = logger.child({ module: 'cron.routes' });
 
@@ -58,11 +59,10 @@ export function createCronRouter(): Router {
         .where('isActive', '=', true)
         .execute();
 
-      const results = await Promise.allSettled(
-        tenants.map((t) => markOverdueUC.execute(t.id)),
-      );
+      const overdueResults  = await Promise.allSettled(tenants.map((t) => markOverdueUC.execute(t.id)));
+      const reminderResults = await Promise.allSettled(tenants.map((t) => generateOverdueReminders(t.id)));
 
-      const summary = results.reduce(
+      const summary = overdueResults.reduce(
         (acc, r, i) => {
           if (r.status === 'fulfilled') {
             acc.totalMarked += r.value.markedCount;
@@ -72,8 +72,12 @@ export function createCronRouter(): Router {
           }
           return acc;
         },
-        { totalTenants: tenants.length, succeeded: 0, totalMarked: 0, failed: [] as { tenantId: string; error: string }[] },
+        { totalTenants: tenants.length, succeeded: 0, totalMarked: 0, remindersCreated: 0, failed: [] as { tenantId: string; error: string }[] },
       );
+
+      summary.remindersCreated = reminderResults
+        .filter((r): r is PromiseFulfilledResult<{ created: number }> => r.status === 'fulfilled')
+        .reduce((sum, r) => sum + r.value.created, 0);
 
       res.json(summary);
     } catch (err) { next(err); }

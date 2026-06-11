@@ -1,10 +1,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDelinquent } from '@/hooks/useDelinquent';
+import { useReminders, useMarkReminderSent, useSkipReminder } from '@/hooks/useReminders';
+import type { Reminder, ReminderType } from '@/hooks/useReminders';
 import { formatCOP, formatDate } from '@/lib/formatters';
 import type { DelinquentUnit } from '@/lib/schemas';
 import { api } from '@/lib/api';
-import { AlertTriangle, MessageCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Bell, MessageCircle, RefreshCw } from 'lucide-react';
 
 // ── Mora severity ─────────────────────────────────────────────────────────────
 
@@ -158,12 +160,175 @@ function BulkNotifyModal({ units, onClose }: BulkNotifyModalProps) {
   );
 }
 
+// ── Reminder badge ────────────────────────────────────────────────────────────
+
+const REMINDER_LABELS: Record<ReminderType, string> = {
+  D1:  '1 día',
+  D7:  '7 días',
+  D30: '30 días',
+};
+
+const REMINDER_BADGE: Record<ReminderType, string> = {
+  D1:  'bg-amber-900/20 text-amber-400 border-amber-700/30',
+  D7:  'bg-orange-900/20 text-orange-400 border-orange-700/30',
+  D30: 'bg-red-900/20 text-red-400 border-red-700/30',
+};
+
+function ReminderRow({ reminder }: { reminder: Reminder }) {
+  const markSent = useMarkReminderSent();
+  const skip     = useSkipReminder();
+  const [opening, setOpening] = useState(false);
+
+  const handleSend = () => {
+    if (!reminder.whatsappUrl) return;
+    setOpening(true);
+    window.open(reminder.whatsappUrl, '_blank', 'noopener,noreferrer');
+    markSent.mutate({ id: reminder.id, via: 'whatsapp_link' }, {
+      onSettled: () => setOpening(false),
+    });
+  };
+
+  return (
+    <div className="bg-surface-card border border-surface-border rounded-lg px-4 py-3 flex items-center gap-4">
+      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${REMINDER_BADGE[reminder.reminderType]}`}>
+        {reminder.reminderType}
+      </span>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-white font-medium text-sm truncate">
+            {reminder.unitLabel ?? reminder.unitId}
+          </p>
+          {reminder.ownerName && (
+            <span className="text-slate-400 text-[11px] truncate">{reminder.ownerName}</span>
+          )}
+        </div>
+        <p className="text-slate-400 text-[11px] mt-0.5 truncate">
+          {reminder.concept} · vence {formatDate(reminder.dueDate)}
+        </p>
+      </div>
+
+      <div className="text-right flex-shrink-0">
+        <p className="text-white font-bold text-sm tabular-nums">{formatCOP(BigInt(reminder.amountCents))}</p>
+        <p className="text-slate-500 text-[10px]">pendiente</p>
+      </div>
+
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {reminder.phone && reminder.whatsappUrl ? (
+          <button
+            onClick={handleSend}
+            disabled={opening || markSent.isPending}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[11px] font-semibold transition-colors disabled:opacity-50"
+          >
+            {opening || markSent.isPending ? <SpinnerIcon /> : <WhatsAppIcon />}
+            Enviar
+          </button>
+        ) : (
+          <span className="text-slate-600 text-[10px]">Sin teléfono</span>
+        )}
+        <button
+          onClick={() => skip.mutate(reminder.id)}
+          disabled={skip.isPending}
+          className="px-2 py-1.5 rounded-lg border border-surface-border hover:bg-surface-hover text-slate-400 hover:text-white text-[11px] transition-colors disabled:opacity-40"
+          title="Omitir este recordatorio"
+        >
+          Omitir
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RemindersTab() {
+  const [typeFilter, setTypeFilter] = useState<ReminderType | undefined>(undefined);
+
+  const { data, isLoading } = useReminders({
+    status: 'pending',
+    type:   typeFilter,
+    limit:  100,
+  });
+
+  const { data: allPending } = useReminders({ status: 'pending', limit: 200 });
+
+  const countByType = useMemo(() => {
+    const counts: Record<ReminderType, number> = { D1: 0, D7: 0, D30: 0 };
+    for (const r of allPending?.reminders ?? []) counts[r.reminderType]++;
+    return counts;
+  }, [allPending]);
+
+  const reminders = data?.reminders ?? [];
+  const total     = data?.total ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => setTypeFilter(undefined)}
+          className={`px-3 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+            typeFilter === undefined
+              ? 'bg-brand-purple/20 border-brand-purple/40 text-brand-purple'
+              : 'border-surface-border text-slate-400 hover:text-white'
+          }`}
+        >
+          Todos
+          {allPending && (
+            <span className="ml-1.5 opacity-70">{allPending.total}</span>
+          )}
+        </button>
+        {(['D1', 'D7', 'D30'] as ReminderType[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTypeFilter(typeFilter === t ? undefined : t)}
+            className={`px-3 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+              typeFilter === t
+                ? `${REMINDER_BADGE[t]} border-current`
+                : 'border-surface-border text-slate-400 hover:text-white'
+            }`}
+          >
+            {REMINDER_LABELS[t]}
+            {countByType[t] > 0 && (
+              <span className="ml-1.5 opacity-80">{countByType[t]}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12 text-slate-400 text-sm">Cargando…</div>
+      ) : reminders.length === 0 ? (
+        <div className="text-center py-16 text-slate-400 text-sm">
+          <Bell size={32} className="mx-auto mb-3 opacity-30" />
+          <p>No hay recordatorios pendientes</p>
+          <p className="text-[11px] mt-1 text-slate-500">
+            El cron nocturno los genera automáticamente para cargas vencidas
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="text-slate-500 text-[11px]">{total} recordatorio{total !== 1 ? 's' : ''} pendiente{total !== 1 ? 's' : ''}</p>
+          <div className="space-y-2">
+            {reminders.map((r) => (
+              <ReminderRow key={r.id} reminder={r} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+type Tab = 'cartera' | 'recordatorios';
 
 export default function MorosidadPage() {
   const qc = useQueryClient();
   const { data = [], isLoading } = useDelinquent();
   const [showNotify, setShowNotify] = useState(false);
+  const [tab, setTab] = useState<Tab>('cartera');
+
+  const { data: pendingReminders } = useReminders({ status: 'pending', limit: 1 });
 
   const markOverdue = useMutation({
     mutationFn: () => api.post<{ markedCount: number; totalAmount: string }>('/dashboard/mark-overdue', {}),
@@ -194,7 +359,7 @@ export default function MorosidadPage() {
             <RefreshCw size={13} className={markOverdue.isPending ? 'animate-spin' : ''} />
             {markOverdue.isPending ? 'Marcando…' : 'Marcar vencidas'}
           </button>
-          {data.length > 0 && (
+          {tab === 'cartera' && data.length > 0 && (
             <button
               onClick={() => setShowNotify(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366]/10 border border-[#25D366]/30 hover:bg-[#25D366]/20 text-[#25D366] text-[11px] font-semibold rounded-md transition-colors"
@@ -211,56 +376,89 @@ export default function MorosidadPage() {
         </div>
       </div>
 
-      {/* Mark-overdue result banner */}
-      {markOverdue.isSuccess && markOverdue.data && (
-        <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg px-4 py-2.5 flex items-center gap-2">
-          <AlertTriangle size={14} className="text-amber-400 flex-shrink-0" />
-          <p className="text-amber-300 text-[11px]">
-            {markOverdue.data.data.markedCount > 0
-              ? `${markOverdue.data.data.markedCount} cargo${markOverdue.data.data.markedCount > 1 ? 's' : ''} marcado${markOverdue.data.data.markedCount > 1 ? 's' : ''} como vencido — ${formatCOP(BigInt(markOverdue.data.data.totalAmount))}`
-              : 'Sin cargos activos vencidos por marcar'}
-          </p>
-        </div>
-      )}
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-surface-border">
+        {([
+          { id: 'cartera',       label: 'Cartera morosa',  badge: data.length > 0 ? data.length : undefined },
+          { id: 'recordatorios', label: 'Recordatorios',   badge: (pendingReminders?.total ?? 0) > 0 ? pendingReminders?.total : undefined },
+        ] as { id: Tab; label: string; badge?: number }[]).map(({ id, label, badge }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2.5 text-[12px] font-semibold border-b-2 transition-colors -mb-px flex items-center gap-1.5 ${
+              tab === id
+                ? 'border-brand-purple text-white'
+                : 'border-transparent text-slate-400 hover:text-white'
+            }`}
+          >
+            {label}
+            {badge !== undefined && (
+              <span className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 ${
+                tab === id ? 'bg-brand-purple/20 text-brand-purple' : 'bg-surface-card text-slate-400'
+              }`}>
+                {badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-      {/* KPI strip */}
-      {data.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-surface-card rounded-lg px-3 py-3">
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Cartera morosa</p>
-            <p className="text-status-red font-bold text-base tabular-nums">{formatCOP(totalOwed)}</p>
-          </div>
-          <div className="bg-surface-card rounded-lg px-3 py-3">
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Mora crítica (+3m)</p>
-            <p className={`font-bold text-base ${criticalUnits.length > 0 ? 'text-red-400' : 'text-slate-400'}`}>
-              {criticalUnits.length} unidades
-            </p>
-          </div>
-          <div className="bg-surface-card rounded-lg px-3 py-3">
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Promedio mora</p>
-            <p className="text-white font-bold text-base">
-              {data.length > 0
-                ? `${(data.reduce((s, d) => s + d.monthsDelinquent, 0) / data.length).toFixed(1)} meses`
-                : '—'}
-            </p>
-          </div>
-        </div>
-      )}
+      {tab === 'cartera' ? (
+        <>
+          {/* Mark-overdue result banner */}
+          {markOverdue.isSuccess && markOverdue.data && (
+            <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg px-4 py-2.5 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-400 flex-shrink-0" />
+              <p className="text-amber-300 text-[11px]">
+                {markOverdue.data.data.markedCount > 0
+                  ? `${markOverdue.data.data.markedCount} cargo${markOverdue.data.data.markedCount > 1 ? 's' : ''} marcado${markOverdue.data.data.markedCount > 1 ? 's' : ''} como vencido — ${formatCOP(BigInt(markOverdue.data.data.totalAmount))}`
+                  : 'Sin cargos activos vencidos por marcar'}
+              </p>
+            </div>
+          )}
 
-      {/* Delinquent list */}
-      {isLoading ? (
-        <div className="text-center py-12 text-slate-400 text-sm">Cargando…</div>
-      ) : data.length === 0 ? (
-        <div className="text-center py-16 text-slate-400 text-sm">
-          <MessageCircle size={32} className="mx-auto mb-3 opacity-30" />
-          No hay unidades en mora
-        </div>
+          {/* KPI strip */}
+          {data.length > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-surface-card rounded-lg px-3 py-3">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Cartera morosa</p>
+                <p className="text-status-red font-bold text-base tabular-nums">{formatCOP(totalOwed)}</p>
+              </div>
+              <div className="bg-surface-card rounded-lg px-3 py-3">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Mora crítica (+3m)</p>
+                <p className={`font-bold text-base ${criticalUnits.length > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                  {criticalUnits.length} unidades
+                </p>
+              </div>
+              <div className="bg-surface-card rounded-lg px-3 py-3">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1">Promedio mora</p>
+                <p className="text-white font-bold text-base">
+                  {data.length > 0
+                    ? `${(data.reduce((s, d) => s + d.monthsDelinquent, 0) / data.length).toFixed(1)} meses`
+                    : '—'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Delinquent list */}
+          {isLoading ? (
+            <div className="text-center py-12 text-slate-400 text-sm">Cargando…</div>
+          ) : data.length === 0 ? (
+            <div className="text-center py-16 text-slate-400 text-sm">
+              <MessageCircle size={32} className="mx-auto mb-3 opacity-30" />
+              No hay unidades en mora
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.map((unit, i) => (
+                <UnitRow key={unit.unitId} unit={unit} rank={i + 1} />
+              ))}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="space-y-2">
-          {data.map((unit, i) => (
-            <UnitRow key={unit.unitId} unit={unit} rank={i + 1} />
-          ))}
-        </div>
+        <RemindersTab />
       )}
 
       {showNotify && (
