@@ -9,7 +9,7 @@ import { generateStatementPDF, generatePazYSalvoPDF } from '../infrastructure/pd
 import { generatePortfolioExcel } from '../infrastructure/excel.generator.js';
 
 function sanitizeCsvCell(v: string): string {
-  return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  return /^[=+\-@|\t\r]/.test(v) ? `'${v}` : v;
 }
 
 export function createExportRouter(): Router {
@@ -119,7 +119,7 @@ export function createExportRouter(): Router {
         return [
           fecha,
           sanitizeCsvCell(r.transactionType ?? ''),
-          r.code ?? '',
+          sanitizeCsvCell(r.code ?? ''),
           sanitizeCsvCell(r.name ?? ''),
           sanitizeCsvCell(r.unitLabel ?? ''),
           sanitizeCsvCell((r.description ?? '').replace(/;/g, ',')),
@@ -160,7 +160,7 @@ export function createExportRouter(): Router {
           )
           .where('charges.tenantId', '=', tenantId)
           .where('charges.status', 'in', ['active', 'partial', 'overdue'])
-          .where('charges.dueDate', '<=', new Date(cutDate))
+          .where(sql<boolean>`charges.due_date::date <= ${cutDate}::date`)
           .groupBy([
             'charges.unitId', 'charges.unitLabel', 'charges.ownerName',
             'units.phone', 'units.coefficient',
@@ -243,11 +243,11 @@ export function createExportRouter(): Router {
         .where('tenantId', '=', tenantId)
         .where('unitId', '=', unitId)
         .where('status', 'in', ['active', 'partial', 'overdue'])
-        .where('dueDate', '<=', new Date(cutDate))
-        .select(sql<string>`COALESCE(SUM(charges.amount - charges.paid_amount), 0)`.as('balance'))
+        .where(sql<boolean>`charges.due_date::date <= ${cutDate}::date`)
+        .select(sql<string>`COALESCE(SUM(ROUND(charges.amount - charges.paid_amount)), 0)`.as('balance'))
         .executeTakeFirst();
 
-      const balance = BigInt(balanceRow?.balance ? Math.round(Number(balanceRow.balance)) : 0);
+      const balance = BigInt(String(balanceRow?.balance ?? '0'));
 
       if (balance > 0n) {
         res.status(409).json({ error: 'La unidad tiene saldo pendiente', balance: balance.toString() });

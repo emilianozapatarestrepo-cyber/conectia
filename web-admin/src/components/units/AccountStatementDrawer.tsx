@@ -4,7 +4,7 @@ import { useUnitStatement } from '@/hooks/useUnitStatement';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { WhatsAppIcon, SpinnerIcon } from '@/components/ui/icons';
 import { formatCOP } from '@/lib/formatters';
-import { api } from '@/lib/api';
+import { downloadBlob } from '@/lib/downloadBlob';
 import type { UnitStatementCharge, UnitStatementPayment } from '@/lib/schemas';
 
 interface Props {
@@ -52,15 +52,6 @@ function PaymentRow({ payment }: { payment: UnitStatementPayment }) {
   );
 }
 
-async function downloadBlob(path: string, filename: string) {
-  const { data } = await api.get<Blob>(path, { responseType: 'blob' });
-  const url = URL.createObjectURL(data);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export function AccountStatementDrawer({ unitId, unitLabel, period, onClose }: Props) {
   const { data, isLoading } = useUnitStatement(unitId);

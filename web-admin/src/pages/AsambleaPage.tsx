@@ -6,17 +6,7 @@ import {
   Play, Square, FileText, Loader2, Trash2, Vote,
   CalendarDays, MapPin, Percent, AlertTriangle, Download,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-
-async function downloadBlob(path: string, filename: string) {
-  const { data } = await api.get<Blob>(path, { responseType: 'blob' });
-  const url = URL.createObjectURL(data);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+import { downloadBlob } from '@/lib/downloadBlob';
 import { clsx } from 'clsx';
 import {
   useAssembliesList, useAssemblyDetail,

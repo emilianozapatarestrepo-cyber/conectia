@@ -3,22 +3,12 @@ import { X, ShieldCheck, ShieldAlert, Download } from 'lucide-react';
 import { useUnitStatement } from '@/hooks/useUnitStatement';
 import { SpinnerIcon } from '@/components/ui/icons';
 import { formatCOP } from '@/lib/formatters';
-import { api } from '@/lib/api';
+import { downloadBlob } from '@/lib/downloadBlob';
 
 interface Props {
   unitId:    string;
   unitLabel: string;
   onClose:   () => void;
-}
-
-async function downloadBlob(path: string, filename: string) {
-  const { data } = await api.get<Blob>(path, { responseType: 'blob' });
-  const url = URL.createObjectURL(data);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 export function PazSalvoDrawer({ unitId, unitLabel, onClose }: Props) {

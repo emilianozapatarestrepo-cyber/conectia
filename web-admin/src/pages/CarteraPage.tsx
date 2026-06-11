@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PeriodSelector } from '@/components/ui/PeriodSelector';
 import { formatCOP, formatDate } from '@/lib/formatters';
 import { api } from '@/lib/api';
+import { downloadBlob } from '@/lib/downloadBlob';
 import type { Charge } from '@/lib/schemas';
 import { WhatsAppIcon } from '@/components/ui/icons';
 import { AccountStatementDrawer } from '@/components/units/AccountStatementDrawer';
@@ -300,16 +301,6 @@ function currentPeriod(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-
-async function downloadBlob(path: string, filename: string) {
-  const { data } = await api.get<Blob>(path, { responseType: 'blob' });
-  const url = URL.createObjectURL(data);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function makeColumns(onCobrar: (charge: Charge) => void): Column<Charge>[] {
   return [
