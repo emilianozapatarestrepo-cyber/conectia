@@ -263,6 +263,19 @@ export function createExportRouter(): Router {
         generatedAt: new Date().toLocaleDateString('es-CO'),
       });
 
+      // Audit trail — Ley 675 compliance: register every certificate issued
+      await db.insertInto('auditLog').values({
+        tenantId,
+        actorId: req.user!.uid,
+        action: 'export.paz_y_salvo',
+        targetTable: 'units',
+        targetId: unitId,
+        beforeData: null,
+        afterData: JSON.stringify({ unitId, cutDate, issuedAt: new Date().toISOString() }),
+        ipAddress: req.ip ?? null,
+        userAgent: req.headers['user-agent'] ?? null,
+      }).execute();
+
       const safeUnitId = encodeURIComponent(unitId);
       res.set({
         'Content-Type': 'application/pdf',

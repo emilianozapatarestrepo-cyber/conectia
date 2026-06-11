@@ -1,5 +1,12 @@
 import PDFDocument from 'pdfkit';
 
+function writeFooter(doc: PDFKit.PDFDocument, text: string, marginX: number): void {
+  const footerY = doc.page.height - 30;
+  if (doc.y > footerY - 10) doc.addPage();
+  doc.fontSize(8).fillColor('#aaaaaa')
+    .text(text, marginX, footerY, { width: doc.page.width - marginX * 2, align: 'center', lineBreak: false });
+}
+
 export interface PazYSalvoData {
   buildingName:      string;
   unitLabel:         string;
@@ -109,7 +116,7 @@ export function generateStatementPDF(data: StatementData): Promise<Buffer> {
     doc.font('Helvetica-Bold').text('Total adeudado:', 340, y);
     doc.text(data.totalOwed, 450, y);
 
-    doc.fontSize(8).font('Helvetica').text(`Generado el ${data.generatedAt} · Conectia`, 50, 780);
+    writeFooter(doc, `Generado el ${data.generatedAt} · Conectia`, 50);
 
     doc.end();
   });
@@ -157,9 +164,7 @@ export function generatePazYSalvoPDF(data: PazYSalvoData): Promise<Buffer> {
     doc.fontSize(10).fillColor('#444444')
       .text(`Fecha de expedición: ${data.generatedAt}`, 60, signatureY + 50, { width: pageW, align: 'center' });
 
-    // Footer
-    doc.fontSize(8).fillColor('#aaaaaa')
-      .text(`Generado por Conectia · ${data.generatedAt}`, 60, 780, { width: pageW, align: 'center' });
+    writeFooter(doc, `Generado por Conectia · ${data.generatedAt}`, 60);
 
     doc.end();
   });
@@ -279,9 +284,7 @@ export function generateMinutesPDF(data: MinutesData): Promise<Buffer> {
       y = doc.y + 6;
     }
 
-    // Footer
-    doc.fontSize(8).fillColor('#aaaaaa')
-      .text(`Generado el ${data.generatedAt} · Conectia`, L, 780, { width: W, align: 'center' });
+    writeFooter(doc, `Generado el ${data.generatedAt} · Conectia`, L);
 
     doc.end();
   });
