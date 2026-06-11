@@ -1,6 +1,7 @@
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useDashboardTrend } from '@/hooks/useDashboardTrend';
 import { useAlerts } from '@/hooks/useAlerts';
+import { useBudgetSummary } from '@/hooks/useBudget';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { ProgressBar } from '@/components/dashboard/ProgressBar';
 import { TrendChart } from '@/components/dashboard/TrendChart';
@@ -9,8 +10,77 @@ import { AlertsList } from '@/components/dashboard/AlertsList';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { TodayStrip } from '@/components/dashboard/TodayStrip';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
+import { SpinnerIcon } from '@/components/ui/icons';
 import { formatCOP, formatPct, formatTrend, formatPeriod } from '@/lib/formatters';
 import { Download } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { clsx } from 'clsx';
+
+// ── Budget widget ─────────────────────────────────────────────────────────────
+
+function BudgetWidget() {
+  const year = new Date().getFullYear();
+  const { data: summaryRows = [], isLoading } = useBudgetSummary(year);
+
+  const totalBudgeted = summaryRows.reduce((s, r) => s + BigInt(r.budgeted), 0n);
+  const totalExecuted = summaryRows.reduce((s, r) => s + BigInt(r.executed), 0n);
+  const executionPct = totalBudgeted > 0n
+    ? Math.min(100, Number((totalExecuted * 10000n) / totalBudgeted) / 100)
+    : 0;
+
+  const pctColor =
+    executionPct >= 100 ? 'text-status-red' :
+    executionPct >= 80  ? 'text-status-yellow' :
+                          'text-status-green';
+  const barColor =
+    executionPct >= 100 ? 'bg-status-red' :
+    executionPct >= 80  ? 'bg-status-yellow' :
+                          'bg-status-green';
+
+  return (
+    <div className="bg-surface-card rounded-lg border border-surface-border p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Presupuesto {year}</p>
+        <Link
+          to="/presupuesto"
+          className="text-[11px] text-brand-primary hover:text-brand-primary/80 transition-colors"
+        >
+          Ver detalle →
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-slate-400 text-[12px] py-2">
+          <SpinnerIcon className="w-3.5 h-3.5" />
+          Cargando…
+        </div>
+      ) : summaryRows.length === 0 ? (
+        <p className="text-[12px] text-slate-500 py-2">Sin presupuesto configurado</p>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-end justify-between gap-2">
+            <div>
+              <p className="text-white font-bold text-lg tabular-nums">{formatCOP(totalExecuted)}</p>
+              <p className="text-[11px] text-slate-500">de {formatCOP(totalBudgeted)}</p>
+            </div>
+            <p className={clsx('font-bold text-xl tabular-nums', pctColor)}>
+              {Math.round(executionPct)}%
+            </p>
+          </div>
+          <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className={clsx('h-full rounded-full transition-all', barColor)}
+              style={{ width: `${executionPct}%` }}
+            />
+          </div>
+          <p className="text-[10px] text-slate-500">
+            {summaryRows.length} categoría{summaryRows.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ResumenPage() {
   const { data: summaryData, isLoading, error } = useDashboardSummary();
@@ -93,6 +163,7 @@ export default function ResumenPage() {
         <TrendChart data={trend} currentPeriod={period} />
         <div className="space-y-3">
           <HealthScore healthScore={healthScore} />
+          <BudgetWidget />
           <AlertsList alerts={alerts.slice(0, 3)} />
         </div>
       </div>

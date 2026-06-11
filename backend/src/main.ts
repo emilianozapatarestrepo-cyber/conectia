@@ -25,6 +25,7 @@ import { createAnnouncementsRouter } from './modules/announcements/presentation/
 import { createPortalRouter } from './modules/portal/presentation/portal.routes.js';
 import { createPortalAdminRouter } from './modules/portal/presentation/portal-admin.routes.js';
 import { createAssembliesRouter } from './modules/assemblies/presentation/assemblies.routes.js';
+import { createBudgetsRouter } from './modules/budgets/presentation/budgets.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -113,6 +114,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/announcements', createAnnouncementsRouter());
   app.use('/api/v1/portal-admin', createPortalAdminRouter());
   app.use('/api/v1/assemblies', createAssembliesRouter());
+  app.use('/api/v1/budgets',    createBudgetsRouter());
 
   // ── Cron endpoints (secret-protected, no user auth) ──
   app.use('/cron', createCronRouter());

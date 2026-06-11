@@ -18,6 +18,7 @@ const ConfiguracionPage   = lazy(() => import('@/pages/ConfiguracionPage'));
 const PqrsPage            = lazy(() => import('@/pages/PqrsPage'));
 const ReservasPage        = lazy(() => import('@/pages/ReservasPage'));
 const ComunicadosPage     = lazy(() => import('@/pages/ComunicadosPage'));
+const PresupuestoPage     = lazy(() => import('@/pages/PresupuestoPage'));
 
 const Suspensed = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
         { path: 'reservas',        element: <Suspensed><ReservasPage /></Suspensed> },
         { path: 'comunicados',     element: <Suspensed><ComunicadosPage /></Suspensed> },
         { path: 'pqrs',            element: <Suspensed><PqrsPage /></Suspensed> },
+        { path: 'presupuesto',     element: <Suspensed><PresupuestoPage /></Suspensed> },
       ],
     }],
   },

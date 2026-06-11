@@ -444,6 +444,7 @@ export interface DB {
   assemblyAttendances: AssemblyAttendancesTable;
   assemblyVotes: AssemblyVotesTable;
   chargeReminders: ChargeRemindersTable;
+  budgetItems: BudgetItemsTable;
 }
 
 // ─── Convenience Types ───────────────────────────────────────────────────────
@@ -623,3 +624,23 @@ export interface ChargeRemindersTable {
 
 export type ChargeReminder    = Selectable<ChargeRemindersTable>;
 export type NewChargeReminder = Insertable<ChargeRemindersTable>;
+
+// ── Budget Items (Sprint 16) ──────────────────────────────────────────────────
+
+export interface BudgetItemsTable {
+  id:          Generated<string>;
+  tenantId:    string;
+  periodYear:  number;
+  category:    string;
+  concept:     string;
+  budgeted:    ColumnType<string, bigint | number | string, bigint | number | string>;
+  executed:    ColumnType<string, bigint | number | string, bigint | number | string>;
+  notes:       string | null;
+  createdBy:   string;
+  createdAt:   Generated<Date>;
+  updatedAt:   Generated<Date>;
+}
+
+export type BudgetItem    = Selectable<BudgetItemsTable>;
+export type NewBudgetItem = Insertable<BudgetItemsTable>;
+export type BudgetItemUpdate = Updateable<BudgetItemsTable>;
