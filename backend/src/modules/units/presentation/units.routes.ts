@@ -143,6 +143,99 @@ export function createUnitsRouter(): Router {
     } catch (err) { next(err); }
   });
 
+  // GET /units/:unitId/estado-cuenta — admin per-unit account statement
+  router.get('/:unitId/estado-cuenta', requireAdmin, async (req, res, next) => {
+    try {
+      const unitId = z.string().min(1).max(50).parse(req.params['unitId']);
+      const tenantId = req.user!.tenantId!;
+
+      const toCents = (v: bigint | string): bigint =>
+        typeof v === 'bigint' ? v : BigInt(String(v ?? '0'));
+
+      const { unit, openCharges, paidCharges } = await withTenantTransaction(tenantId, async (trx) => {
+        const unit = await trx
+          .selectFrom('units')
+          .select(['unitId', 'label', 'ownerName', 'phone', 'email', 'feeAmount', 'coefficient'])
+          .where('tenantId', '=', tenantId)
+          .where('unitId', '=', unitId)
+          .where('active', '=', true)
+          .executeTakeFirst();
+
+        if (!unit) return { unit: null, openCharges: [], paidCharges: [] };
+
+        const [openCharges, paidCharges] = await Promise.all([
+          trx
+            .selectFrom('charges')
+            .select(['id', 'concept', 'amount', 'paidAmount', 'dueDate', 'status'])
+            .where('tenantId', '=', tenantId)
+            .where('unitId', '=', unitId)
+            .where('status', 'in', ['active', 'overdue', 'partial'])
+            .orderBy('dueDate', 'asc')
+            .execute(),
+          trx
+            .selectFrom('charges')
+            .select(['id', 'concept', 'amount', 'paidAt'])
+            .where('tenantId', '=', tenantId)
+            .where('unitId', '=', unitId)
+            .where('status', '=', 'paid')
+            .orderBy('paidAt', 'desc')
+            .limit(24)
+            .execute(),
+        ]);
+
+        return { unit, openCharges, paidCharges };
+      });
+
+      if (!unit) {
+        res.status(404).json({ error: 'Unit not found' });
+        return;
+      }
+
+      let balance = 0n;
+      const charges = openCharges.map((c) => {
+        const due = toCents(c.amount) - toCents(c.paidAmount);
+        balance += due > 0n ? due : 0n;
+        return {
+          id: c.id,
+          concept: c.concept,
+          amount: toCents(c.amount).toString(),
+          paidAmount: toCents(c.paidAmount).toString(),
+          amountDue: (due > 0n ? due : 0n).toString(),
+          dueDate: c.dueDate instanceof Date ? c.dueDate.toISOString().slice(0, 10) : String(c.dueDate).slice(0, 10),
+          status: c.status,
+        };
+      });
+
+      const totalPaidHistory = paidCharges.reduce((s, c) => s + toCents(c.amount), 0n);
+      const totalPaidPartials = openCharges.reduce((s, c) => s + toCents(c.paidAmount), 0n);
+      const totalCharged = openCharges.reduce((s, c) => s + toCents(c.amount), 0n)
+        + paidCharges.reduce((s, c) => s + toCents(c.amount), 0n);
+      const totalPaid = totalPaidHistory + totalPaidPartials;
+
+      res.json({
+        unit: {
+          unitId: unit.unitId,
+          label: unit.label,
+          ownerName: unit.ownerName,
+          phone: unit.phone,
+          email: unit.email,
+          feeAmount: toCents(unit.feeAmount).toString(),
+          coefficient: unit.coefficient?.toString() ?? '0',
+        },
+        totalCharged: totalCharged.toString(),
+        totalPaid: totalPaid.toString(),
+        balance: balance.toString(),
+        charges,
+        payments: paidCharges.map((c) => ({
+          id: c.id,
+          concept: c.concept,
+          amount: toCents(c.amount).toString(),
+          paidAt: c.paidAt instanceof Date ? c.paidAt.toISOString() : c.paidAt,
+        })),
+      });
+    } catch (err) { next(err); }
+  });
+
   // PUT /units/:id
   router.put('/:id', requireAdmin, async (req, res, next) => {
     try {

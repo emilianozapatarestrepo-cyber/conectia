@@ -7,6 +7,7 @@ import { TrendChart } from '@/components/dashboard/TrendChart';
 import { HealthScore } from '@/components/dashboard/HealthScore';
 import { AlertsList } from '@/components/dashboard/AlertsList';
 import { QuickActions } from '@/components/dashboard/QuickActions';
+import { TodayStrip } from '@/components/dashboard/TodayStrip';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { formatCOP, formatPct, formatTrend, formatPeriod } from '@/lib/formatters';
 import { Download } from 'lucide-react';
@@ -83,6 +84,9 @@ export default function ResumenPage() {
           color="blue"
         />
       </div>
+
+      {/* ¿Qué hago hoy? — data-driven action strip */}
+      <TodayStrip summary={summary} alerts={alerts} />
 
       {/* Bottom grid: chart + health score + alerts */}
       <div className="grid grid-cols-[1fr_280px] gap-3">

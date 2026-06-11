@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { ChevronDown, FileText } from 'lucide-react';
 import { useCharges } from '@/hooks/useCharges';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -7,6 +8,7 @@ import { formatCOP, formatDate } from '@/lib/formatters';
 import { api } from '@/lib/api';
 import type { Charge } from '@/lib/schemas';
 import { WhatsAppIcon } from '@/components/ui/icons';
+import { AccountStatementDrawer } from '@/components/units/AccountStatementDrawer';
 
 // ── Payment link modal ────────────────────────────────────────────────────────
 
@@ -346,10 +348,13 @@ const AGING_CONFIG: Record<AgingKey, { label: string; sub: string; color: string
 const AGING_ORDER: AgingKey[] = ['corriente', '1-30', '31-60', '61-90', '+90'];
 
 export default function CarteraPage() {
-  const [period, setPeriod]         = useState(currentPeriod());
-  const [exporting, setExporting]   = useState(false);
+  const [period, setPeriod]             = useState(currentPeriod());
+  const [exporting, setExporting]       = useState(false);
+  const [csvExporting, setCsvExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [cobrarCharge, setCobrarCharge] = useState<Charge | null>(null);
   const [showBulkNotify, setShowBulkNotify] = useState(false);
+  const [statementCharge, setStatementCharge] = useState<Charge | null>(null);
   const { data: charges = [], isLoading } = useCharges({ status: 'all', period });
 
   const columns = useMemo(() => makeColumns(setCobrarCharge), []);
@@ -391,6 +396,17 @@ export default function CarteraPage() {
     }
   };
 
+  const handleExportCsv = async () => {
+    setCsvExporting(true);
+    setShowExportMenu(false);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await downloadBlob(`/export/saldos-cartera?asOf=${today}`, `saldos-cartera-${today}.csv`);
+    } finally {
+      setCsvExporting(false);
+    }
+  };
+
   return (
     <div className="p-5 space-y-5">
 
@@ -409,14 +425,37 @@ export default function CarteraPage() {
               Notificar pendientes
             </button>
           )}
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-card border border-surface-border hover:bg-surface-hover disabled:opacity-50 text-slate-300 hover:text-white text-[11px] font-semibold rounded-md transition-colors"
-          >
-            <DownloadIcon />
-            {exporting ? 'Exportando…' : 'Exportar Excel'}
-          </button>
+          <div className="relative">
+            <div className="flex items-center rounded-md border border-surface-border overflow-hidden">
+              <button
+                onClick={handleExport}
+                disabled={exporting || csvExporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-card hover:bg-surface-hover disabled:opacity-50 text-slate-300 hover:text-white text-[11px] font-semibold transition-colors"
+              >
+                {exporting ? <><SpinnerIcon />Exportando…</> : <><DownloadIcon />Exportar Excel</>}
+              </button>
+              <span className="w-px h-4 bg-surface-border" />
+              <button
+                onClick={() => setShowExportMenu((v) => !v)}
+                disabled={exporting || csvExporting}
+                className="px-2 py-1.5 bg-surface-card hover:bg-surface-hover disabled:opacity-50 text-slate-400 hover:text-white transition-colors"
+                aria-label="Más opciones de exportación"
+              >
+                <ChevronDown size={12} />
+              </button>
+            </div>
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-surface-card border border-surface-border rounded-lg shadow-xl shadow-black/40 py-1 min-w-[148px]">
+                <button
+                  onClick={() => void handleExportCsv()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-slate-300 hover:bg-surface-hover hover:text-white transition-colors text-left"
+                >
+                  {csvExporting ? <SpinnerIcon /> : <FileText size={13} />}
+                  Exportar CSV
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -483,6 +522,7 @@ export default function CarteraPage() {
           keyFn={(r) => r.id}
           loading={isLoading}
           emptyMessage="No hay cargos pendientes para este período"
+          onRowClick={(row) => setStatementCharge(row)}
         />
       </div>
 
@@ -497,6 +537,15 @@ export default function CarteraPage() {
         <BulkNotifyModal
           charges={pending}
           onClose={() => setShowBulkNotify(false)}
+        />
+      )}
+
+      {statementCharge && (
+        <AccountStatementDrawer
+          unitId={statementCharge.unitId}
+          unitLabel={statementCharge.unitLabel}
+          period={period}
+          onClose={() => setStatementCharge(null)}
         />
       )}
     </div>

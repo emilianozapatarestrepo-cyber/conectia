@@ -197,3 +197,43 @@ export const announcementRecipientSchema = z.object({
 
 export type Announcement = z.output<typeof announcementSchema>;
 export type AnnouncementRecipient = z.output<typeof announcementRecipientSchema>;
+
+// ── Unit Account Statement (Sprint 14) ───────────────────────────────────────
+
+export const unitStatementChargeSchema = z.object({
+  id:         z.string(),
+  concept:    z.string(),
+  amount:     bigintStr,
+  paidAmount: bigintStr,
+  amountDue:  bigintStr,
+  dueDate:    z.string(),
+  status:     z.enum(['draft', 'active', 'paid', 'partial', 'overdue', 'cancelled', 'written_off']),
+});
+
+export const unitStatementPaymentSchema = z.object({
+  id:      z.string(),
+  concept: z.string(),
+  amount:  bigintStr,
+  paidAt:  z.string().nullable(),
+});
+
+export const unitStatementSchema = z.object({
+  unit: z.object({
+    unitId:      z.string(),
+    label:       z.string(),
+    ownerName:   z.string().nullable(),
+    phone:       z.string().nullable(),
+    email:       z.string().nullable(),
+    feeAmount:   bigintStr,
+    coefficient: z.string(),
+  }),
+  totalCharged: bigintStr,
+  totalPaid:    bigintStr,
+  balance:      bigintStr,
+  charges:      z.array(unitStatementChargeSchema),
+  payments:     z.array(unitStatementPaymentSchema),
+});
+
+export type UnitStatement = z.infer<typeof unitStatementSchema>;
+export type UnitStatementCharge = z.infer<typeof unitStatementChargeSchema>;
+export type UnitStatementPayment = z.infer<typeof unitStatementPaymentSchema>;
