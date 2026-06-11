@@ -66,6 +66,10 @@ export function useMarkReminderSent() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['reminders'] });
     },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Error al marcar recordatorio como enviado';
+      console.error('[useMarkReminderSent]', msg);
+    },
   });
 }
 
@@ -77,6 +81,10 @@ export function useSkipReminder() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Error al omitir recordatorio';
+      console.error('[useSkipReminder]', msg);
     },
   });
 }

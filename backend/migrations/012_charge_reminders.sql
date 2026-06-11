@@ -44,7 +44,19 @@ CREATE POLICY charge_reminders_tenant ON charge_reminders
   WITH CHECK (tenant_id = current_tenant_id());
 
 -- ── 5. Indexes ────────────────────────────────────────────────────────────────
+-- Hot path: admin reminder list (tenant + status + optional type + date order)
 CREATE INDEX idx_charge_reminders_tenant_status
   ON charge_reminders (tenant_id, status, scheduled_for);
+
+-- Partial index covering only pending reminders — the vast majority of queries
+CREATE INDEX idx_charge_reminders_pending
+  ON charge_reminders (tenant_id, reminder_type, scheduled_for)
+  WHERE status = 'pending';
+
+-- Used by cron ON CONFLICT and any charge-level lookups
 CREATE INDEX idx_charge_reminders_charge
   ON charge_reminders (charge_id);
+
+-- Used when skipping/marking all reminders for a deleted/paid charge
+CREATE INDEX idx_charge_reminders_tenant_charge
+  ON charge_reminders (tenant_id, charge_id);

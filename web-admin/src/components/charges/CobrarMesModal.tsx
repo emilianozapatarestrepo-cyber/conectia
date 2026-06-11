@@ -233,7 +233,7 @@ export function CobrarMesModal({ onClose, onSuccess }: Props) {
               <button
                 onClick={() => void execute()}
                 disabled={isPending || activeUnits.length === 0}
-                className="flex-1 py-2.5 rounded-xl bg-brand-primary hover:bg-blue-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-all shadow-lg shadow-blue-500/20"
+                className="flex-1 py-2.5 rounded-xl bg-brand-primary hover:bg-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-all shadow-lg shadow-indigo-500/20"
               >
                 {isPending ? 'Generando cobros…' : `Cobrar ${activeUnits.length} unidades`}
               </button>
@@ -289,7 +289,7 @@ export function CobrarMesModal({ onClose, onSuccess }: Props) {
                     : '');
                 onSuccess(ym);
               }}
-              className="w-full py-2.5 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[13px] font-semibold transition-all shadow-lg shadow-blue-500/20"
+              className="w-full py-2.5 rounded-xl bg-brand-primary hover:bg-indigo-400 text-white text-[13px] font-semibold transition-all shadow-lg shadow-indigo-500/20"
             >
               Ver cobros generados →
             </button>

@@ -364,11 +364,11 @@ export function createAssembliesRouter(): Router {
         .set({ status: 'cerrada' })
         .where('id', '=', id)
         .where('tenantId', '=', tenantId)
-        .where('status', 'in', ['en_curso', 'convocada', 'borrador'])
+        .where('status', 'in', ['en_curso', 'convocada'])
         .returningAll()
         .executeTakeFirst();
 
-      if (!row) { res.status(404).json({ error: 'Asamblea no encontrada o ya cerrada' }); return; }
+      if (!row) { res.status(404).json({ error: 'Asamblea no encontrada, ya cerrada, o en borrador' }); return; }
       res.json({ ...row, scheduledDate: row.scheduledDate ? toDateOnly(row.scheduledDate) : null });
     } catch (err) { next(err); }
   });
@@ -458,6 +458,19 @@ export function createAssembliesRouter(): Router {
       const assemblyId = z.string().uuid().parse(req.params['id']);
       const itemId     = z.string().uuid().parse(req.params['itemId']);
       const tenantId   = req.user!.tenantId!;
+
+      const assembly = await db
+        .selectFrom('assemblies')
+        .select('status')
+        .where('id', '=', assemblyId)
+        .where('tenantId', '=', tenantId)
+        .executeTakeFirst();
+
+      if (!assembly) { res.status(404).json({ error: 'Asamblea no encontrada' }); return; }
+      if (assembly.status === 'cerrada') {
+        res.status(409).json({ error: 'No se puede modificar el orden del día de una asamblea cerrada' });
+        return;
+      }
 
       const deleted = await db
         .deleteFrom('assemblyAgendaItems')
@@ -619,33 +632,21 @@ export function createAssembliesRouter(): Router {
         return;
       }
 
-      // Upsert vote
-      const existing = await db
-        .selectFrom('assemblyVotes')
-        .select('id')
-        .where('agendaItemId', '=', body.agendaItemId)
-        .where('unitId', '=', body.unitId)
-        .executeTakeFirst();
-
-      if (existing) {
-        await db
-          .updateTable('assemblyVotes')
-          .set({ vote: body.vote })
-          .where('id', '=', existing.id)
-          .execute();
-      } else {
-        await db
-          .insertInto('assemblyVotes')
-          .values({
-            assemblyId,
-            agendaItemId: body.agendaItemId,
-            tenantId,
-            unitId:      body.unitId,
-            vote:        body.vote,
-            coefficient: attendance.coefficient,
-          })
-          .execute();
-      }
+      // Atomic upsert — UNIQUE (agenda_item_id, unit_id) prevents duplicate votes
+      await db
+        .insertInto('assemblyVotes')
+        .values({
+          assemblyId,
+          agendaItemId: body.agendaItemId,
+          tenantId,
+          unitId:      body.unitId,
+          vote:        body.vote,
+          coefficient: attendance.coefficient,
+        })
+        .onConflict((oc) =>
+          oc.columns(['agendaItemId', 'unitId']).doUpdateSet({ vote: body.vote })
+        )
+        .execute();
 
       const tally = await tallyVotesSingle(body.agendaItemId, parseFloat(agendaItem.requiredMajority));
       res.json({ agendaItemId: body.agendaItemId, ...tally });

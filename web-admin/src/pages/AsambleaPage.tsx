@@ -26,7 +26,7 @@ const STATUS_BADGE: Record<AssemblyStatus, { label: string; cls: string }> = {
 };
 
 const inputCls = 'w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-white focus:outline-none focus:ring-1 focus:ring-blue-400/50 placeholder:text-slate-500';
-const btnPrimary = 'flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[13px] font-semibold transition-all disabled:opacity-50';
+const btnPrimary = 'flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-indigo-500 text-white text-[13px] font-semibold transition-all disabled:opacity-50';
 const btnGhost = 'flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/[0.08] hover:bg-white/[0.04] text-slate-400 text-[13px] transition-all';
 
 function Badge({ status }: { status: AssemblyStatus }) {

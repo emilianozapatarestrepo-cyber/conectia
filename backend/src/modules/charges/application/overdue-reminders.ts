@@ -57,23 +57,19 @@ export async function generateOverdueReminders(tenantId: string): Promise<{ crea
       )
       .execute();
 
-    for (const c of candidates) {
-      const outstanding =
-        BigInt(String(c.amount)) - BigInt(String(c.paidAmount));
-      if (outstanding <= 0n) continue;
+    const values = candidates
+      .map((c) => {
+        const outstanding = BigInt(String(c.amount)) - BigInt(String(c.paidAmount));
+        if (outstanding <= 0n) return null;
 
-      const dueDate   = c.dueDate instanceof Date
-        ? c.dueDate.toISOString().slice(0, 10)
-        : String(c.dueDate).slice(0, 10);
+        const dueDate = (c.dueDate instanceof Date
+          ? c.dueDate.toISOString()
+          : String(c.dueDate)).slice(0, 10);
 
-      // scheduledFor = due_date + daysAfterDue
-      const scheduled = new Date(`${dueDate}T12:00:00Z`);
-      scheduled.setUTCDate(scheduled.getUTCDate() + daysAfterDue);
-      const scheduledFor = scheduled.toISOString().slice(0, 10);
+        const scheduled = new Date(`${dueDate}T12:00:00Z`);
+        scheduled.setUTCDate(scheduled.getUTCDate() + daysAfterDue);
 
-      const inserted = await db
-        .insertInto('chargeReminders')
-        .values({
+        return {
           tenantId,
           chargeId:     c.chargeId,
           unitId:       c.unitId,
@@ -84,13 +80,19 @@ export async function generateOverdueReminders(tenantId: string): Promise<{ crea
           concept:      c.concept,
           dueDate,
           reminderType: type,
-          scheduledFor,
-        })
+          scheduledFor: scheduled.toISOString().slice(0, 10),
+        };
+      })
+      .filter((v): v is NonNullable<typeof v> => v !== null);
+
+    if (values.length > 0) {
+      const inserted = await db
+        .insertInto('chargeReminders')
+        .values(values)
         .onConflict((oc) => oc.columns(['chargeId', 'reminderType']).doNothing())
         .returning('id')
-        .executeTakeFirst();
-
-      if (inserted) created++;
+        .execute();
+      created += inserted.length;
     }
   }
 

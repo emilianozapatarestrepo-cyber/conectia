@@ -11,6 +11,7 @@ import { requireAuth, requireTenant, requireAdmin } from '../../../shared/middle
 import { requireSubscription } from '../../billing/application/require-subscription.js';
 import { markReminderSent, skipReminder, buildReminderWhatsAppUrl } from '../application/overdue-reminders.js';
 import { toDateOnly } from '../../../shared/validation/datetime.js';
+import { env } from '../../../config/env.js';
 
 const createChargeSchema = z.object({
   unitId: z.string().min(1),
@@ -246,7 +247,7 @@ export function createChargesRouter(): Router {
         offset: z.coerce.number().int().min(0).default(0),
       }).parse(req.query);
 
-      const appUrl = (await import('../../../config/env.js')).env.APP_URL ?? '';
+      const appUrl = env.APP_URL ?? '';
 
       let query = db
         .selectFrom('chargeReminders')
@@ -263,21 +264,31 @@ export function createChargesRouter(): Router {
         .offset(filter.offset)
         .execute();
 
-      const enriched = await Promise.all(rows.map(async (r) => {
-        // Fetch current payment-link reference so wa.me goes to the right place
-        const intent = appUrl && r.phone ? await db
-          .selectFrom('paymentIntents')
-          .select(['idempotencyKey'])
-          .where('chargeId', '=', r.chargeId)
-          .where('tenantId', '=', tenantId)
-          .where('status', '=', 'pending')
-          .orderBy('createdAt', 'desc')
-          .limit(1)
-          .executeTakeFirst()
-          : null;
+      // Batch: one query for all relevant payment intents instead of N round-trips
+      const chargeIdsWithPhone = rows.filter((r) => r.phone && appUrl).map((r) => r.chargeId);
+      const intentRows = chargeIdsWithPhone.length > 0
+        ? await db
+            .selectFrom('paymentIntents')
+            .select(['chargeId', 'idempotencyKey'])
+            .where('chargeId', 'in', chargeIdsWithPhone)
+            .where('tenantId', '=', tenantId)
+            .where('status', '=', 'pending')
+            .orderBy('createdAt', 'desc')
+            .execute()
+        : [];
 
+      // Keep only the latest intent per charge (results are already desc-sorted)
+      const latestIntent = new Map<string, string>();
+      for (const i of intentRows) {
+        if (i.chargeId && i.idempotencyKey && !latestIntent.has(i.chargeId)) {
+          latestIntent.set(i.chargeId, i.idempotencyKey);
+        }
+      }
+
+      const enriched = rows.map((r) => {
+        const idempotencyKey = latestIntent.get(r.chargeId);
+        const payUrl = idempotencyKey ? `${appUrl}/pay/${idempotencyKey}` : '';
         const daysOverdue = r.reminderType === 'D1' ? 1 : r.reminderType === 'D7' ? 7 : 30;
-        const payUrl = intent ? `${appUrl}/pay/${intent.idempotencyKey}` : '';
         const whatsappUrl = r.phone && payUrl
           ? buildReminderWhatsAppUrl({
               phone: r.phone, ownerName: r.ownerName, unitLabel: r.unitLabel,
@@ -293,14 +304,17 @@ export function createChargesRouter(): Router {
           amountCents:  r.amountCents.toString(),
           whatsappUrl,
         };
-      }));
+      });
 
-      const total = await db
+      let countQuery = db
         .selectFrom('chargeReminders')
         .select((eb) => eb.fn.countAll<string>().as('count'))
         .where('tenantId', '=', tenantId)
-        .where('status', '=', filter.status)
-        .executeTakeFirst();
+        .where('status', '=', filter.status);
+
+      if (filter.type) countQuery = countQuery.where('reminderType', '=', filter.type);
+
+      const total = await countQuery.executeTakeFirst();
 
       res.json({ reminders: enriched, total: Number(total?.count ?? 0) });
     } catch (err) { next(err); }

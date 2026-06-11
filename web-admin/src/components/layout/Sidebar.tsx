@@ -28,12 +28,12 @@ export function Sidebar() {
   const openPqrs = (pqrsStats?.abierta ?? 0) + (pqrsStats?.en_proceso ?? 0);
 
   return (
-    <aside className="w-[168px] flex-shrink-0 bg-[#080d1a] border-r border-white/[0.06] flex flex-col h-screen sticky top-0">
+    <aside className="w-[168px] flex-shrink-0 bg-surface-deep border-r border-white/[0.06] flex flex-col h-screen sticky top-0">
 
       {/* Logo */}
       <div className="px-4 py-[18px] border-b border-white/[0.06] flex items-center gap-2.5">
         {/* Logo mark */}
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0">
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 flex-shrink-0">
           <span className="text-white font-black text-[13px] leading-none tracking-tight">C</span>
         </div>
         <span className="text-white font-bold text-[15px] tracking-tight">Conectia</span>

@@ -327,7 +327,7 @@ function NuevaReservaModal({ amenities, onClose }: { amenities: Amenity[]; onClo
             <button
               type="submit"
               disabled={create.isPending}
-              className="flex-1 px-4 py-2 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[12px] font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2 rounded-xl bg-brand-primary hover:bg-indigo-400 text-white text-[12px] font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {create.isPending && <Loader2 size={12} className="animate-spin" />}
               Crear reserva
@@ -485,7 +485,7 @@ function GestionarZonasModal({ amenities, onClose }: { amenities: Amenity[]; onC
                 <button
                   type="submit"
                   disabled={create.isPending}
-                  className="flex-1 px-3 py-2 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[11px] font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  className="flex-1 px-3 py-2 rounded-xl bg-brand-primary hover:bg-indigo-400 text-white text-[11px] font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-1.5"
                 >
                   {create.isPending && <Loader2 size={10} className="animate-spin" />}
                   Guardar zona
@@ -578,7 +578,7 @@ export default function ReservasPage() {
           <button
             onClick={() => setShowNueva(true)}
             disabled={activeAmenities.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[12px] font-semibold transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-primary hover:bg-indigo-400 text-white text-[12px] font-semibold transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={13} />
             Nueva reserva
@@ -594,7 +594,7 @@ export default function ReservasPage() {
           <p className="text-[11px] text-slate-500 mt-1 mb-4">Agrega la piscina, salón comunal, gimnasio u otras zonas para empezar a gestionar reservas.</p>
           <button
             onClick={() => setShowGestionar(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[12px] font-semibold transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-primary hover:bg-indigo-400 text-white text-[12px] font-semibold transition-all"
           >
             <Plus size={13} />
             Agregar primera zona

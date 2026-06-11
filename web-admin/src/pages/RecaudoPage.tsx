@@ -173,7 +173,7 @@ export default function RecaudoPage() {
           </button>
           <button
             onClick={() => setShowCobrarMes(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-primary hover:bg-blue-400 text-white text-[12px] font-semibold transition-all shadow-lg shadow-blue-500/20"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-primary hover:bg-indigo-400 text-white text-[12px] font-semibold transition-all shadow-lg shadow-indigo-500/20"
           >
             <Zap size={13} />
             Cobrar mes
