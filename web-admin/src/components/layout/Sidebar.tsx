@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   BarChart2, DollarSign, FileText, AlertTriangle, RefreshCw,
-  Presentation, Settings, Building2, MessageSquare, CalendarCheck, Megaphone, PieChart,
+  Presentation, Settings, Building2, MessageSquare, CalendarCheck, Megaphone, PieChart, BarChart3,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { usePqrsStats } from '@/hooks/usePqrs';
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/comunicados',  icon: Megaphone,     label: 'Comunicados' },
   { to: '/pqrs',         icon: MessageSquare, label: 'PQRS' },
   { to: '/presupuesto',  icon: PieChart,      label: 'Presupuesto' },
+  { to: '/reportes',    icon: BarChart3,     label: 'Reportes' },
 ] as const;
 
 const BOTTOM_ITEMS = [

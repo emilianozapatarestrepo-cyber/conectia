@@ -26,6 +26,7 @@ import { createPortalRouter } from './modules/portal/presentation/portal.routes.
 import { createPortalAdminRouter } from './modules/portal/presentation/portal-admin.routes.js';
 import { createAssembliesRouter } from './modules/assemblies/presentation/assemblies.routes.js';
 import { createBudgetsRouter } from './modules/budgets/presentation/budgets.routes.js';
+import { createReportsRouter } from './modules/reports/presentation/reports.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -115,6 +116,7 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/portal-admin', createPortalAdminRouter());
   app.use('/api/v1/assemblies', createAssembliesRouter());
   app.use('/api/v1/budgets',    createBudgetsRouter());
+  app.use('/api/v1/reports',   createReportsRouter());
 
   // ── Cron endpoints (secret-protected, no user auth) ──
   app.use('/cron', createCronRouter());

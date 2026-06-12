@@ -1,5 +1,40 @@
 import PDFDocument from 'pdfkit';
 
+// ── Shared report account type ───────────────────────────────────────────────
+export interface ReportAccount {
+  id:          string;
+  code:        string;
+  name:        string;
+  accountType: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  parentId:    string | null;
+  balance:     string; // BIGINT as string, centavos
+}
+
+export interface BalanceGeneralData {
+  buildingName: string;
+  asOf:         string;
+  generatedAt:  string;
+  accounts:     ReportAccount[];
+  totals: {
+    assets:      bigint;
+    liabilities: bigint;
+    equity:      bigint;
+  };
+}
+
+export interface EstadoResultadosData {
+  buildingName: string;
+  from:         string;
+  to:           string;
+  generatedAt:  string;
+  accounts:     ReportAccount[];
+  totals: {
+    revenue:   bigint;
+    expenses:  bigint;
+    netIncome: bigint;
+  };
+}
+
 function writeFooter(doc: PDFKit.PDFDocument, text: string, marginX: number): void {
   const footerY = doc.page.height - 30;
   if (doc.y > footerY - 10) doc.addPage();
@@ -286,6 +321,144 @@ export function generateMinutesPDF(data: MinutesData): Promise<Buffer> {
 
     writeFooter(doc, `Generado el ${data.generatedAt} · Conectia`, L);
 
+    doc.end();
+  });
+}
+
+// ── Balance General PDF ───────────────────────────────────────────────────────
+
+function copStr(cents: bigint): string {
+  const abs = cents < 0n ? -cents : cents;
+  const pesos = abs / 100n;
+  return `${cents < 0n ? '-' : ''}$${Number(pesos).toLocaleString('es-CO')}`;
+}
+
+export function generateBalanceGeneralPDF(data: BalanceGeneralData): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    doc.on('data', (c: Buffer) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const L = 50, R = 545, W = 495;
+
+    doc.fontSize(18).font('Helvetica-Bold').fillColor('#000000').text('Conectia', L, 50);
+    doc.fontSize(11).font('Helvetica').fillColor('#444444').text(data.buildingName, L, 75);
+    doc.moveTo(L, 98).lineTo(R, 98).strokeColor('#888888').stroke();
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#000000').text('BALANCE GENERAL', L, 112);
+    doc.fontSize(10).font('Helvetica').fillColor('#666666').text(`Al ${data.asOf}`, L, 130);
+
+    let y = 155;
+
+    const sections: Array<{ title: string; type: ReportAccount['accountType']; total: bigint }> = [
+      { title: 'ACTIVOS',     type: 'asset',     total: data.totals.assets },
+      { title: 'PASIVOS',     type: 'liability', total: data.totals.liabilities },
+      { title: 'PATRIMONIO',  type: 'equity',    total: data.totals.equity },
+    ];
+
+    for (const section of sections) {
+      if (y > 680) { doc.addPage(); y = 50; }
+
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000')
+        .text(section.title, L, y, { width: W });
+      doc.moveTo(L, y + 13).lineTo(R, y + 13).strokeColor('#cccccc').stroke();
+      y += 18;
+
+      const accts = data.accounts.filter((a) => a.accountType === section.type);
+      for (const acct of accts) {
+        if (y > 710) { doc.addPage(); y = 50; }
+        doc.fontSize(8).font('Helvetica').fillColor('#333333')
+          .text(`${acct.code}  ${acct.name}`, L + 10, y, { width: W - 90 });
+        doc.text(copStr(BigInt(acct.balance)), R - 80, y, { width: 80, align: 'right' });
+        y = doc.y + 1;
+      }
+
+      if (y > 710) { doc.addPage(); y = 50; }
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000')
+        .text(`Total ${section.title}`, L + 10, y + 4, { width: W - 90 });
+      doc.text(copStr(section.total), R - 80, y + 4, { width: 80, align: 'right' });
+      doc.moveTo(L, y + 2).lineTo(R, y + 2).strokeColor('#cccccc').stroke();
+      y += 22;
+    }
+
+    if (y > 710) { doc.addPage(); y = 50; }
+    const balanced = data.totals.assets === data.totals.liabilities + data.totals.equity;
+    doc.moveTo(L, y).lineTo(R, y).strokeColor('#888888').stroke();
+    y += 8;
+    doc.fontSize(8).font('Helvetica').fillColor(balanced ? '#16a34a' : '#dc2626')
+      .text(
+        balanced
+          ? `✓ Ecuación contable cuadra: Activos (${copStr(data.totals.assets)}) = Pasivos + Patrimonio (${copStr(data.totals.liabilities + data.totals.equity)})`
+          : `⚠ Diferencia: ${copStr(data.totals.assets - data.totals.liabilities - data.totals.equity)}`,
+        L, y, { width: W }
+      );
+
+    writeFooter(doc, `Generado el ${data.generatedAt} · Conectia`, L);
+    doc.end();
+  });
+}
+
+// ── Estado de Resultados PDF ──────────────────────────────────────────────────
+
+export function generateEstadoResultadosPDF(data: EstadoResultadosData): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    doc.on('data', (c: Buffer) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const L = 50, R = 545, W = 495;
+
+    doc.fontSize(18).font('Helvetica-Bold').fillColor('#000000').text('Conectia', L, 50);
+    doc.fontSize(11).font('Helvetica').fillColor('#444444').text(data.buildingName, L, 75);
+    doc.moveTo(L, 98).lineTo(R, 98).strokeColor('#888888').stroke();
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#000000').text('ESTADO DE RESULTADOS', L, 112);
+    doc.fontSize(10).font('Helvetica').fillColor('#666666')
+      .text(`Período: ${data.from} — ${data.to}`, L, 130);
+
+    let y = 155;
+
+    const sections: Array<{ title: string; type: ReportAccount['accountType']; total: bigint }> = [
+      { title: 'INGRESOS', type: 'revenue', total: data.totals.revenue },
+      { title: 'EGRESOS',  type: 'expense', total: data.totals.expenses },
+    ];
+
+    for (const section of sections) {
+      if (y > 680) { doc.addPage(); y = 50; }
+
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000')
+        .text(section.title, L, y, { width: W });
+      doc.moveTo(L, y + 13).lineTo(R, y + 13).strokeColor('#cccccc').stroke();
+      y += 18;
+
+      const accts = data.accounts.filter((a) => a.accountType === section.type);
+      for (const acct of accts) {
+        if (y > 710) { doc.addPage(); y = 50; }
+        doc.fontSize(8).font('Helvetica').fillColor('#333333')
+          .text(`${acct.code}  ${acct.name}`, L + 10, y, { width: W - 90 });
+        doc.text(copStr(BigInt(acct.balance)), R - 80, y, { width: 80, align: 'right' });
+        y = doc.y + 1;
+      }
+
+      if (y > 710) { doc.addPage(); y = 50; }
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000')
+        .text(`Total ${section.title}`, L + 10, y + 4, { width: W - 90 });
+      doc.text(copStr(section.total), R - 80, y + 4, { width: 80, align: 'right' });
+      doc.moveTo(L, y + 2).lineTo(R, y + 2).strokeColor('#cccccc').stroke();
+      y += 22;
+    }
+
+    if (y > 710) { doc.addPage(); y = 50; }
+    const netPositive = data.totals.netIncome >= 0n;
+    doc.moveTo(L, y).lineTo(R, y).strokeColor('#888888').stroke();
+    y += 8;
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(netPositive ? '#16a34a' : '#dc2626')
+      .text('RESULTADO DEL PERÍODO', L + 10, y, { width: W - 90 });
+    doc.text(copStr(data.totals.netIncome), R - 80, y, { width: 80, align: 'right' });
+
+    writeFooter(doc, `Generado el ${data.generatedAt} · Conectia`, L);
     doc.end();
   });
 }
