@@ -1,10 +1,14 @@
 import type { Request, Response, NextFunction } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import admin from 'firebase-admin';
+import { z } from 'zod';
 import { env } from '../../config/env.js';
 import { db } from '../database/db.js';
+import { logger } from '../logger.js';
 import { AppError } from '../../modules/ledger/domain/errors.js';
 import type { MembershipRole } from '../database/schema.js';
+
+const authLog = logger.child({ module: 'auth' });
 
 // ─── Firebase Admin Initialization (singleton, thread-safe) ─────────────────
 
@@ -27,7 +31,7 @@ function ensureFirebaseInit(): void {
   }
 
   firebaseInitialized = true;
-  console.log('[Auth] Firebase Admin initialized ✓');
+  authLog.info('Firebase Admin initialized');
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -60,7 +64,8 @@ export interface AuthenticatedUser {
 declare global {
   namespace Express {
     interface Request {
-      user?: AuthenticatedUser;
+      user?:         AuthenticatedUser;
+      subscription?: import('../../modules/billing/application/billing.service.js').SubscriptionView;
     }
   }
 }
@@ -194,11 +199,11 @@ export function requireTenant(req: Request, _res: Response, next: NextFunction):
   const firebaseUid = req.user.uid;
 
   // Optional: client can specify which tenant context (for multi-building users)
-  const requestedTenantId = req.headers['x-tenant-id'];
-  const tenantIdFilter =
-    typeof requestedTenantId === 'string' && requestedTenantId.length > 0
-      ? requestedTenantId
-      : undefined;
+  // Validated as UUID to prevent injection via malformed header values
+  const rawTenantHeader = req.headers['x-tenant-id'];
+  const tenantIdFilter = typeof rawTenantHeader === 'string'
+    ? z.string().uuid().safeParse(rawTenantHeader).data
+    : undefined;
 
   // Query tenant_memberships — the authoritative source of truth
   let query = db

@@ -14,9 +14,10 @@ interface Props<T> {
   keyFn: (row: T) => string;
   loading?: boolean;
   emptyMessage?: string;
+  onRowClick?: (row: T) => void;
 }
 
-export function DataTable<T>({ columns, data, keyFn, loading, emptyMessage = 'Sin datos' }: Props<T>) {
+export function DataTable<T>({ columns, data, keyFn, loading, emptyMessage = 'Sin datos', onRowClick }: Props<T>) {
   if (loading) {
     return (
       <div className="animate-pulse space-y-2">
@@ -55,7 +56,14 @@ export function DataTable<T>({ columns, data, keyFn, loading, emptyMessage = 'Si
             </tr>
           ) : (
             data.map((row, index) => (
-              <tr key={keyFn(row)} className="border-b border-surface-border hover:bg-surface-hover transition-colors">
+              <tr
+                key={keyFn(row)}
+                className={clsx(
+                  'border-b border-surface-border hover:bg-surface-hover transition-colors',
+                  onRowClick && 'cursor-pointer'
+                )}
+                onClick={() => onRowClick?.(row)}
+              >
                 {columns.map((col) => (
                   <td
                     key={col.key}

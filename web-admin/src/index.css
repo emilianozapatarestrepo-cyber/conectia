@@ -1,3 +1,20 @@
+@import '@fontsource-variable/inter';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Enforce Inter everywhere — override the system-font fallback */
+  html {
+    font-family: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tabular figures for all numeric data */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

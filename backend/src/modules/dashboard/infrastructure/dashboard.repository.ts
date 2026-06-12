@@ -38,12 +38,20 @@ export class DashboardRepository implements IDashboardRepository {
         ])
         .executeTakeFirstOrThrow();
 
-      // Count pending reconciliation payment intents
+      // Count pending reconciliation payment intents (status=pending, awaiting admin approval)
       const piRow = await trx
         .selectFrom('paymentIntents')
         .where('tenantId', '=', tenantId)
         .where('status', '=', 'pending')
         .select((eb) => [eb.fn.count<string>('id').as('count')])
+        .executeTakeFirstOrThrow();
+
+      // Sum confirmed intents not yet settled (in processor, not yet in bank)
+      const settlementRow = await trx
+        .selectFrom('paymentIntents')
+        .where('tenantId', '=', tenantId)
+        .where('status', '=', 'confirmed')
+        .select((eb) => [eb.fn.sum<string>('amount').as('total')])
         .executeTakeFirstOrThrow();
 
       const total = Number(row.total) || 0;
@@ -66,6 +74,7 @@ export class DashboardRepository implements IDashboardRepository {
         collectedPct: total > 0 ? Math.round((paid / total) * 100) : 0,
         delinquentPct: total > 0 ? Math.round((overdue / total) * 100) : 0,
         pendingReconciliationCount: Number(piRow.count),
+        pendingSettlementAmount: BigInt(settlementRow.total ?? '0'),
         currentDay: now.getDate(),
         daysInMonth: new Date(year, month, 0).getDate(),
         prevPeriodCollectedPct: null,
@@ -119,27 +128,37 @@ export class DashboardRepository implements IDashboardRepository {
     return withTenantTransaction(tenantId, async (trx) => {
       const rows = await trx
         .selectFrom('charges')
-        .where('tenantId', '=', tenantId)
-        .where('status', '=', 'overdue')
-        .groupBy(['unitId', 'unitLabel', 'ownerName'])
-        .orderBy((eb) => eb.fn.sum<string>('amount'), 'desc')
-        .select((eb) => [
-          'unitId',
-          'unitLabel',
-          'ownerName',
-          eb.fn.sum<string>('amount').as('totalOwed'),
-          eb.fn.count<string>('id').as('monthsCount'),
-          sql<Date | null>`MAX(paid_at)`.as('lastPayment'),
+        .leftJoin('units', (join) =>
+          join
+            .onRef('units.unitId', '=', 'charges.unitId')
+            .on('units.tenantId', '=', tenantId)
+            .on('units.active', '=', true),
+        )
+        .where('charges.tenantId', '=', tenantId)
+        .where('charges.status', '=', 'overdue')
+        .groupBy(['charges.unitId', 'charges.unitLabel', 'charges.ownerName', 'units.phone'])
+        .orderBy(sql`SUM(charges.amount)`, 'desc')
+        .select([
+          'charges.unitId',
+          'charges.unitLabel',
+          'charges.ownerName',
+          'units.phone',
+          sql<string>`SUM(charges.amount)`.as('totalOwed'),
+          sql<string>`COUNT(charges.id)`.as('monthsCount'),
+          sql<Date | null>`MAX(charges.paid_at)`.as('lastPayment'),
+          sql<string[]>`array_agg(charges.id)`.as('chargeIds'),
         ])
         .execute();
 
       return rows.map((r) => ({
-        unitId: r.unitId,
-        unitLabel: r.unitLabel ?? r.unitId,
-        ownerName: r.ownerName ?? null,
-        totalOwed: BigInt(r.totalOwed ?? '0'),
+        unitId:          r.unitId,
+        unitLabel:       r.unitLabel ?? r.unitId,
+        ownerName:       r.ownerName ?? null,
+        phone:           r.phone ?? null,
+        chargeIds:       Array.isArray(r.chargeIds) ? r.chargeIds : [],
+        totalOwed:       BigInt(r.totalOwed ?? '0'),
         monthsDelinquent: Number(r.monthsCount),
-        lastPaymentDate: r.lastPayment ?? null,
+        lastPaymentDate:  r.lastPayment ?? null,
       }));
     });
   }

@@ -1,0 +1,35 @@
+{
+  "name": "conectia-monorepo",
+  "private": true,
+  "description": "Conectia — SaaS HOA management platform",
+  "scripts": {
+    "dev:backend":    "npm run dev  --prefix backend",
+    "dev:web":        "npm run dev  --prefix web-admin",
+    "build:backend":  "npm run build --prefix backend",
+    "build:web":      "npm run build --prefix web-admin",
+    "build":          "npm run build:backend && npm run build:web",
+    "lint:backend":   "npm run lint --prefix backend",
+    "lint:web":       "npm run lint --prefix web-admin",
+    "lint":           "npm run lint:backend && npm run lint:web",
+    "typecheck:backend": "npm run typecheck --prefix backend",
+    "typecheck:web":     "npm run typecheck --prefix web-admin",
+    "typecheck":      "npm run typecheck:backend && npm run typecheck:web",
+    "test:backend":   "npm run test  --prefix backend",
+    "test:web":       "npm run test  --prefix web-admin",
+    "test":           "npm run test:backend && npm run test:web",
+    "migrate":        "npm run migrate --prefix backend",
+    "prepare":        "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0"
+  },
+  "lint-staged": {
+    "backend/src/**/*.ts": [
+      "bash -c 'cd backend && npx eslint --fix --max-warnings 0 \"${@#backend/}\"' --"
+    ],
+    "web-admin/src/**/*.{ts,tsx}": [
+      "bash -c 'cd web-admin && npx eslint --fix \"${@#web-admin/}\"' --"
+    ]
+  }
+}

@@ -2,6 +2,9 @@ import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { StatusCodes } from 'http-status-codes';
 import { AppError } from '../../modules/ledger/domain/errors.js';
+import { logger } from '../logger.js';
+
+const log = logger.child({ module: 'error-handler' });
 
 interface ErrorResponse {
   status: 'error';
@@ -65,7 +68,7 @@ export function globalErrorHandler(
   }
 
   // Unknown errors — don't leak internals
-  console.error('[ERROR]', err);
+  log.error({ err }, 'Unhandled error');
   const response: ErrorResponse = {
     status: 'error',
     code: 'INTERNAL_ERROR',

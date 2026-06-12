@@ -8,7 +8,9 @@ const pool = new Pool({
   connectionString: env.DATABASE_URL,
   min: env.DB_POOL_MIN,
   max: env.DB_POOL_MAX,
-  ssl: env.DB_SSL ? { rejectUnauthorized: false } : undefined,
+  // DB_SSL=true uses certificate validation by default.
+  // Only set DB_SSL_REJECT_UNAUTHORIZED=false for self-signed certs in controlled envs.
+  ssl: env.DB_SSL ? { rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED } : undefined,
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
 });

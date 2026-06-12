@@ -11,6 +11,7 @@ export interface DashboardSummary {
   collectedPct: number;        // 0-100
   delinquentPct: number;       // 0-100
   pendingReconciliationCount: number;
+  pendingSettlementAmount: bigint; // confirmed PIs not yet posted to bank
   currentDay: number;
   daysInMonth: number;
   prevPeriodCollectedPct: number | null;
@@ -28,6 +29,8 @@ export interface DelinquentUnit {
   unitId: string;
   unitLabel: string;
   ownerName: string | null;
+  phone: string | null;       // from units roster, for WhatsApp notifications
+  chargeIds: string[];         // individual charge IDs for bulk-links
   totalOwed: bigint;
   monthsDelinquent: number;
   lastPaymentDate: Date | null;

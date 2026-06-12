@@ -12,6 +12,21 @@ import { createLedgerRouter } from './modules/ledger/presentation/ledger.routes.
 import { createDashboardRouter } from './modules/dashboard/presentation/dashboard.routes.js';
 import { createChargesRouter } from './modules/charges/presentation/charges.routes.js';
 import { createExportRouter } from './modules/export/presentation/export.routes.js';
+import { createWebhookRouter } from './modules/webhooks/presentation/webhook.routes.js';
+import { createTenantsRouter } from './modules/tenants/presentation/tenants.routes.js';
+import { createPeriodsRouter } from './modules/periods/presentation/periods.routes.js';
+import { createPayRouter } from './modules/pay/presentation/pay.routes.js';
+import { createUnitsRouter } from './modules/units/presentation/units.routes.js';
+import { createBillingRouter } from './modules/billing/presentation/billing.routes.js';
+import { createCronRouter } from './modules/cron/presentation/cron.routes.js';
+import { createPqrsRouter } from './modules/pqrs/presentation/pqrs.routes.js';
+import { createAmenitiesRouter } from './modules/amenities/presentation/amenities.routes.js';
+import { createAnnouncementsRouter } from './modules/announcements/presentation/announcements.routes.js';
+import { createPortalRouter } from './modules/portal/presentation/portal.routes.js';
+import { createPortalAdminRouter } from './modules/portal/presentation/portal-admin.routes.js';
+import { createAssembliesRouter } from './modules/assemblies/presentation/assemblies.routes.js';
+import { createBudgetsRouter } from './modules/budgets/presentation/budgets.routes.js';
+import { createReportsRouter } from './modules/reports/presentation/reports.routes.js';
 
 const log = logger.child({ module: 'server' });
 
@@ -43,8 +58,41 @@ async function bootstrap(): Promise<void> {
     message: { error: 'Export rate limit exceeded, please wait before requesting another export' },
   });
 
+  // Webhook flood protection — Wompi sends up to 3 retries; 60/min is generous
+  const webhookLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.ip ?? 'unknown',
+    message: { error: 'Webhook rate limit exceeded' },
+  });
+
+  // Portal Residente — public capability-URL surface. Reads are bursty
+  // (mobile, WhatsApp opens); writes (PQRS, reservas) are further capped
+  // per-unit inside the routes.
+  const portalLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiadas solicitudes, intenta de nuevo en un minuto' },
+  });
+
+  // Cron protection — extra layer on top of secret validation
+  const cronLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Cron rate limit exceeded' },
+  });
+
   app.use('/api/v1/', apiLimiter);
   app.use('/api/v1/export', exportLimiter);
+  app.use('/api/v1/portal', portalLimiter);
+  app.use('/webhooks', webhookLimiter);
+  app.use('/cron', cronLimiter);
 
   // ── Health Check ──
   app.get('/health', (_req, res) => {
@@ -56,6 +104,30 @@ async function bootstrap(): Promise<void> {
   app.use('/api/v1/dashboard', createDashboardRouter());
   app.use('/api/v1/charges', createChargesRouter());
   app.use('/api/v1/export', createExportRouter());
+
+  // ── Platform-internal endpoints ──
+  app.use('/api/v1/tenants', createTenantsRouter());
+  app.use('/api/v1/periods', createPeriodsRouter());
+  app.use('/api/v1/units',   createUnitsRouter());
+  app.use('/api/v1/billing', createBillingRouter());
+  app.use('/api/v1/pqrs',      createPqrsRouter());
+  app.use('/api/v1/amenities', createAmenitiesRouter());
+  app.use('/api/v1/announcements', createAnnouncementsRouter());
+  app.use('/api/v1/portal-admin', createPortalAdminRouter());
+  app.use('/api/v1/assemblies', createAssembliesRouter());
+  app.use('/api/v1/budgets',    createBudgetsRouter());
+  app.use('/api/v1/reports',   createReportsRouter());
+
+  // ── Cron endpoints (secret-protected, no user auth) ──
+  app.use('/cron', createCronRouter());
+
+  // ── Public endpoints (no auth) ──
+  app.use('/api/v1/pay', createPayRouter());
+  // Portal Residente — capability-URL auth (token per unit, see portal module)
+  app.use('/api/v1/portal', createPortalRouter());
+
+  // ── Webhook endpoints (no auth — verified by HMAC signature) ──
+  app.use('/webhooks', createWebhookRouter());
 
   // ── Global Error Handler (must be last) ──
   app.use(globalErrorHandler);

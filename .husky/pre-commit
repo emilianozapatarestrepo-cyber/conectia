@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-commit: lint staged files then typecheck both workspaces
+npx lint-staged
+
+echo "[pre-commit] Typechecking backend…"
+npm run typecheck:backend --silent
+
+echo "[pre-commit] Typechecking web-admin…"
+npm run typecheck:web --silent

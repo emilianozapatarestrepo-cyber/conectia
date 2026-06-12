@@ -25,6 +25,7 @@
     "sourceMap": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "ignoreDeprecations": "5.0",
     "baseUrl": "./src",
     "paths": {
       "@config/*": ["config/*"],

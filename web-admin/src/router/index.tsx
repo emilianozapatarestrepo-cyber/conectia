@@ -11,13 +11,26 @@ const MorosidadPage    = lazy(() => import('@/pages/MorosidadPage'));
 const ConciliacionPage = lazy(() => import('@/pages/ConciliacionPage'));
 const AsambleaPage     = lazy(() => import('@/pages/AsambleaPage'));
 const LoginPage        = lazy(() => import('@/pages/LoginPage'));
+const PayPage          = lazy(() => import('@/pages/PayPage'));
+const PortalPage       = lazy(() => import('@/pages/PortalPage'));
+const UnitsPage           = lazy(() => import('@/pages/UnitsPage'));
+const ConfiguracionPage   = lazy(() => import('@/pages/ConfiguracionPage'));
+const PqrsPage            = lazy(() => import('@/pages/PqrsPage'));
+const ReservasPage        = lazy(() => import('@/pages/ReservasPage'));
+const ComunicadosPage     = lazy(() => import('@/pages/ComunicadosPage'));
+const PresupuestoPage     = lazy(() => import('@/pages/PresupuestoPage'));
+const ReportesPage        = lazy(() => import('@/pages/ReportesPage'));
 
 const Suspensed = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
 );
 
 export const router = createBrowserRouter([
-  { path: '/login', element: <Suspensed><LoginPage /></Suspensed> },
+  { path: '/login',          element: <Suspensed><LoginPage /></Suspensed> },
+  // Public — no auth required. Residents land here from WhatsApp/SMS links.
+  { path: '/pay/:reference', element: <Suspensed><PayPage /></Suspensed> },
+  // Public — capability-URL portal per unit (token = auth)
+  { path: '/mi-unidad/:token', element: <Suspensed><PortalPage /></Suspensed> },
   {
     element: <ProtectedRoute />,
     children: [{
@@ -29,6 +42,13 @@ export const router = createBrowserRouter([
         { path: 'morosidad',       element: <Suspensed><MorosidadPage /></Suspensed> },
         { path: 'conciliacion',    element: <Suspensed><ConciliacionPage /></Suspensed> },
         { path: 'asamblea',        element: <Suspensed><AsambleaPage /></Suspensed> },
+        { path: 'unidades',        element: <Suspensed><UnitsPage /></Suspensed> },
+        { path: 'configuracion',   element: <Suspensed><ConfiguracionPage /></Suspensed> },
+        { path: 'reservas',        element: <Suspensed><ReservasPage /></Suspensed> },
+        { path: 'comunicados',     element: <Suspensed><ComunicadosPage /></Suspensed> },
+        { path: 'pqrs',            element: <Suspensed><PqrsPage /></Suspensed> },
+        { path: 'presupuesto',     element: <Suspensed><PresupuestoPage /></Suspensed> },
+        { path: 'reportes',        element: <Suspensed><ReportesPage /></Suspensed> },
       ],
     }],
   },
